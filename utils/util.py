@@ -620,7 +620,7 @@ def save_img(m, zoom_out_value, name):
     driver = webdriver.Firefox(options=options)
 
     # Open the map HTML file
-    driver.get('file:/Users/pouyafirouzmakan/Desktop/VANET/graph_map.html')
+    driver.get('file:/Users/pouyafirouzmakan/Desktop/VANET_multi-hop_clustering/graph_map.html')
 
     # change the zoom
     script = f"document.getElementsByClassName('leaflet-control')[0].style.transform = 'scale({1 / zoom_out_value})';"
