@@ -28,15 +28,25 @@ class Inputs:
                     min_long=-79.540771,
                     max_lat=44.012923,
                     max_long=-79.238069)
+
         alpha = 0.5
-        trans_range = 200
+
+        bus_trans_range = 800
+        bus_max_mem = 30  # number of allowed CMs (just for single-hop) for a bus
+        bus_max_con = 60  # maximum number of connection that a bus can have (including direct members)
+
+        veh_trans_range = 200
+        veh_max_mem = 20  # number of allowed CMs (just for single-hop) for a vehicle being a CH
+        veh_max_con = 60  # maximum number of connection that a vehicle can have (including direct members if the
+        # vehicle is a CH)
+
         start_time = 1600
         iter = 60
         counter = 4
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10
-        weights = np.array([0.9, 0, 0.1])       # direction's angle, speed, distance
+        weights = np.array([0.9, 0, 0.1])  # direction's angle, speed, distance
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,
@@ -55,8 +65,19 @@ class Inputs:
                             help='includes data for all seconds')
         parser.add_argument('--alpha', type=float, default=alpha,
                             help='this is the regularization coefficient to change the sie of the zones based on TR')
-        parser.add_argument('--trans_range', type=int, default=trans_range,
-                            help='this is the transmission range considered in this project and it can be up to 2000')
+        parser.add_argument('--bus_trans_range', type=int, default=bus_trans_range,
+                            help='this is the buses transmission range')
+        parser.add_argument('--bus_max_mem', type=int, default=bus_max_mem,
+                            help='number of allowed CMs (just for single-hop) for a bus')
+        parser.add_argument('--bus_max_con', type=int, default=bus_max_con,
+                            help='maximum number of connection that a bus can have (including direct members)')
+        parser.add_argument('--veh_trans_range', type=int, default=veh_trans_range,
+                            help='this is the vehicles transmission range')
+        parser.add_argument('--veh_max_mem', type=int, default=veh_max_mem,
+                            help='number of allowed CMs (just for single-hop) for a vehicle being a CH')
+        parser.add_argument('--veh_max_con', type=int, default=veh_max_con,
+                            help='maximum number of connection that a vehicle can have (including direct members if the' 
+                                 'vehicle is a CH)')
         parser.add_argument('--start_time', type=int, default=start_time,
                             help='This is the time that the initial values would be extract from sumo_trace.xml file')
         parser.add_argument('--counter', type=int, default=counter,

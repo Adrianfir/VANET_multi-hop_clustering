@@ -47,7 +47,7 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
                 depart_time=None,
-                trans_range=config.trans_range,
+                trans_range=config.bus_trans_range,
                 message_dest={},
                 message_source={},
                 cluster_head=True,
@@ -92,13 +92,15 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
                 depart_time=None,
-                trans_range=config.trans_range,
+                trans_range=config.veh_trans_range,
                 message_dest={},
                 message_source={},
                 cluster_head=False,  # if the vehicle is a ch, it will be True
+                cluster_members=dict(),  # The set of all CMs and the CMs connected via multi-hop scheme
+                # if veh.getAttribute('id) is a CH
                 primary_ch=None,
+                hop=list(),         # here the intermediate nodes between veh.getAttribute('id) and its CH are saved
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
-                cluster_members=set(),  # This will be a Graph if the vehicle is a ch
                 gates=dict(),
                 gate_chs=set(),
                 other_vehs=set(),
