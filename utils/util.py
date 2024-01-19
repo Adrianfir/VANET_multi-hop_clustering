@@ -20,6 +20,7 @@ from PIL import Image
 from io import BytesIO
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
+from sortedcontainers import SortedDict
 import os
 import cv2
 import re
@@ -52,7 +53,8 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
                 message_source={},
                 cluster_head=True,
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
-                cluster_members=set(),
+                cluster_members=dict(),
+                max_mem=config.bus_max_mem,
                 gate_chs=set(),
                 gates=dict(),
                 ip=None,
@@ -98,6 +100,7 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 cluster_head=False,  # if the vehicle is a ch, it will be True
                 cluster_members=dict(),  # The set of all CMs and the CMs connected via multi-hop scheme
                 # if veh.getAttribute('id) is a CH
+                max_mem=config.veh_max_mem,
                 primary_ch=None,
                 hop=list(),         # here the intermediate nodes between veh.getAttribute('id) and its CH are saved
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
@@ -269,6 +272,7 @@ def choose_ch(table, veh_table_i,
     veh_vector_y = np.multiply(euclidian_distance, np.sin(veh_alpha))
 
     min_ef = 1000000
+    sorted_dic = SortedDict()
     for j in candidates:
         # latitude of the centre of previous zone that ch were in
         prev_ch_lat = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_lat'] +
@@ -300,11 +304,8 @@ def choose_ch(table, veh_table_i,
         weights = np.divide(config.weights, sum(config.weights))  # normalizing the weights
         ef = np.matmul(np.transpose(weights),
                        np.array([theta_sim, speed_sim, theta_dist]))
-
-        if ef < min_ef:
-            min_ef = ef
-            nominee = j
-    return nominee, min_ef
+        sorted_dic[ef] = j
+    return sorted_dic.values(), sorted_dic.keys()
 
 
 def update_bus_table(veh, bus_table, zone_id, understudied_area, zones, config, zone_buses, zone_ch, current_time):

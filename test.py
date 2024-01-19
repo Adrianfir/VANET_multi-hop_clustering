@@ -1,11 +1,21 @@
-import re
-lane_id = "157802105_0"
-if ":" in lane_id:
-    pass
-else:
-    pattern = re.compile(f"^(.*?){re.escape('_')}")
-    match = pattern.search(lane_id)
-    if match:
-        lane_id = match.group(1)
+import bisect
 
-print(lane_id)
+class SortedList:
+    def __init__(self):
+        self.list = []
+
+    def insert(self, num):
+        # Insert the negative of the number to maintain a sorted list in descending order
+        bisect.insort(self.list, -num)
+
+    def get_sorted_list(self):
+        # Return the list with numbers negated back to original
+        return [-num for num in self.list]
+
+# Usage:
+sorted_list = SortedList()
+sorted_list.insert(10)
+sorted_list.insert(5)
+sorted_list.insert(20)
+
+print(sorted_list.get_sorted_list())  # Output: [20, 10, 5]

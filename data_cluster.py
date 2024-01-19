@@ -123,9 +123,9 @@ class DataTable:
             else:
                 veh_ids.add(veh.getAttribute('id'))
                 self.veh_table, self.zone_vehicles, self.zone_ch, self.stand_alone, \
-                self.zone_stand_alone = util.update_veh_table(veh, self.veh_table, zone_id, self.understudied_area,
-                                                              zones, config, self.zone_vehicles, self.zone_ch,
-                                                              self.stand_alone, self.zone_stand_alone, self.time)
+                    self.zone_stand_alone = util.update_veh_table(veh, self.veh_table, zone_id, self.understudied_area,
+                                                                  zones, config, self.zone_vehicles, self.zone_ch,
+                                                                  self.stand_alone, self.zone_stand_alone, self.time)
                 if self.veh_table.values(veh.getAttribute('id'))['cluster_head'] is True:
                     self.all_chs.add(veh.getAttribute('id'))
             # add the vertex to the graph
@@ -352,9 +352,15 @@ class DataTable:
                     (self.veh_table.values(veh_id)['cluster_head'] is False):
 
                 if len(bus_candidates) > 0:
-                    if len(bus_candidates) == 1:
-                        bus_ch = list(bus_candidates)[0]
-                        ef = 0
+                    if (len(bus_candidates) == 1) and (self.bus_table.values(bus_candidates[0])['max_mem'] -
+                                                       len(self.bus_table.values(bus_candidates[0]
+                                                                                 ['cluster_members'].keys()) > 0
+                                                           )
+                                                       ):
+                        bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
+                                                    bus_candidates, config)  # determine the best from bus_candidates
+                        bus_ch = bus_ch[0]
+                        ef = ef[0]
                     else:
                         bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
                                                     bus_candidates, config)  # determine the best from bus_candidates
@@ -459,7 +465,7 @@ class DataTable:
 
         unique_pot_ch = set(pot_ch.values())
         selected_chs = set()
-        mem_control = set()   # after a vehicle become a member, add it to this and at the beginning of the
+        mem_control = set()  # after a vehicle become a member, add it to this and at the beginning of the
         # for-loop, check if veh_id is in it to not do anything new and ruin it
         temp = self.stand_alone.copy()
         for veh_id in temp:
