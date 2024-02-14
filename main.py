@@ -39,5 +39,5 @@ if __name__ == "__main__":
     print('\n')
     print('chs: ', a.all_chs)
     print('stand_alones: ', a.stand_alone)
-    print("execution time: ", end_time - start_time)
+    # print("execution time: ", end_time - start_time)
 
