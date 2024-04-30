@@ -1,7 +1,7 @@
 """
 <<main.py>>
 
-This project is related to clustering and routing problem in VANET
+This project is related to multi-hop clustering in VANET
 
 """
 __author__: str = "Pouya 'Adrian' Firouzmakan"
