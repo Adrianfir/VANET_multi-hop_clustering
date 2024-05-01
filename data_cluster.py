@@ -25,7 +25,7 @@ class DataTable:
     def __init__(self, config, zones):
         """
 
-        :param config: look at options.py and config.py
+        :param config: look at options.py and config.pyas
         :param zones: all the zones of the area
         """
 
