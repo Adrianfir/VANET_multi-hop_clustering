@@ -101,6 +101,7 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 cluster_head=False,  # if the vehicle is a ch, it will be True
                 sub_cluster_head=False,  # if it is a sub_ch, it will be True
                 primary_ch=None,
+                secondory_ch=None,
                 sub_chs=set(),  # Stores sub_cluster_heads ids if the vehicle is a cluster_head
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),  # This will be a Graph if the vehicle is a ch
