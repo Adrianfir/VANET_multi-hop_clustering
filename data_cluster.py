@@ -123,9 +123,9 @@ class DataTable:
             else:
                 veh_ids.add(veh.getAttribute('id'))
                 self.veh_table, self.zone_vehicles, self.zone_ch, self.stand_alone, \
-                self.zone_stand_alone = util.update_veh_table(veh, self.veh_table, zone_id, self.understudied_area,
-                                                              zones, config, self.zone_vehicles, self.zone_ch,
-                                                              self.stand_alone, self.zone_stand_alone, self.time)
+                    self.zone_stand_alone = util.update_veh_table(veh, self.veh_table, zone_id, self.understudied_area,
+                                                                  zones, config, self.zone_vehicles, self.zone_ch,
+                                                                  self.stand_alone, self.zone_stand_alone, self.time)
                 if self.veh_table.values(veh.getAttribute('id'))['cluster_head'] is True:
                     self.all_chs.add(veh.getAttribute('id'))
             # add the vertex to the graph
@@ -367,72 +367,14 @@ class DataTable:
                     (self.veh_table.values(veh_id)['primary_ch'] is None) and \
                     (self.veh_table.values(veh_id)['cluster_head'] is False):
 
-                if len(bus_candidates) > 0:
-                    if len(bus_candidates) == 1:
-                        bus_ch = list(bus_candidates)[0]
-                        ef = 0
-                    else:
-                        bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
-                                                    bus_candidates, config)  # determine the best from bus_candidates
+                second_ch_candidates = [h for h in other_vehs if self.veh_table.values(h)['sub_cluster_head']]
+                if len(second_ch_candidates) == 0:
+                    self.single_hop(veh_id, config, zones,
+                                    bus_candidates, ch_candidates, other_vehs)
+                else:
+                    self.multi_hop(veh_id, config, zones, bus_candidates,
+                                   ch_candidates, other_vehs, second_ch_candidates)
 
-                    self.veh_table.values(veh_id)['primary_ch'] = bus_ch
-
-                    self.veh_table.values(veh_id)['cluster_record'].tail.key = bus_ch
-                    self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
-                    self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
-                    self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
-
-                    self.veh_table.values(veh_id)['counter'] = config.counter
-                    # bus_candidates.remove(bus_ch)
-                    self.veh_table.values(veh_id)['other_chs']. \
-                        update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
-                    self.veh_table.values(veh_id)['other_chs']. \
-                        update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-                    self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
-                    self.bus_table.values(bus_ch)['cluster_members'].add(veh_id)
-                    self.bus_table.values(bus_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-                    self.bus_table.values(bus_ch)['gate_chs']. \
-                        update(self.bus_table.values(bus_ch)['gate_chs'].
-                               union(self.veh_table.values(veh_id)['other_chs']))
-                    self.stand_alone.remove(veh_id)
-                    self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
-                    self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-                    self.net_graph.add_edge(bus_ch, veh_id)
-                    for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                        self.net_graph.add_edge(other_ch, veh_id)
-
-                    continue
-                elif (len(bus_candidates) == 0) and (len(ch_candidates) > 0):
-                    if len(ch_candidates) == 1:
-                        veh_ch = list(ch_candidates)[0]
-                        ef = 0
-                    else:
-                        veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
-                                                    zones, ch_candidates, config)  # determine the best from vehicles
-
-                    self.veh_table.values(veh_id)['primary_ch'] = veh_ch
-                    self.veh_table.values(veh_id)['counter'] = config.counter
-
-                    self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
-                    self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
-                    self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
-                    self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
-
-                    ch_candidates.remove(veh_ch)
-                    self.veh_table.values(veh_id)['other_chs']. \
-                        update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-                    self.veh_table.values(veh_ch)['cluster_members'].add(veh_id)
-                    self.veh_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-                    self.veh_table.values(veh_ch)['gate_chs']. \
-                        update(self.veh_table.values(veh_ch)['gate_chs'].
-                               union(self.veh_table.values(veh_id)['other_chs']))
-                    self.stand_alone.remove(veh_id)
-                    self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
-                    self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-                    self.net_graph.add_edge(veh_ch, veh_id)
-                    for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                        self.net_graph.add_edge(other_ch, veh_id)
-                    continue
         # finding buses' other_chs
         for bus in self.bus_table.ids():
             self.bus_table.values(bus)['other_chs'] = set()
@@ -455,6 +397,77 @@ class DataTable:
                 for other_veh in self.veh_table.values(veh_id)['other_vehs']:
                     self.net_graph.add_edge(other_veh, veh_id)
 
+    def single_hop(self, veh_id, config, zones,
+                   bus_candidates, ch_candidates, other_vehs):
+        if len(bus_candidates) > 0:
+            if len(bus_candidates) == 1:
+                bus_ch = list(bus_candidates)[0]
+                ef = 0
+            else:
+                bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
+                                            bus_candidates, config)  # determine the best from bus_candidates
+
+            self.veh_table.values(veh_id)['primary_ch'] = bus_ch
+
+            self.veh_table.values(veh_id)['cluster_record'].tail.key = bus_ch
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
+
+            self.veh_table.values(veh_id)['counter'] = config.counter
+            # bus_candidates.remove(bus_ch)
+            self.veh_table.values(veh_id)['other_chs']. \
+                update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
+            self.veh_table.values(veh_id)['other_chs']. \
+                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
+            self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
+            self.bus_table.values(bus_ch)['cluster_members'].add(veh_id)
+            self.bus_table.values(bus_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
+            self.bus_table.values(bus_ch)['gate_chs']. \
+                update(self.bus_table.values(bus_ch)['gate_chs'].
+                       union(self.veh_table.values(veh_id)['other_chs']))
+            self.stand_alone.remove(veh_id)
+            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
+            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
+            self.net_graph.add_edge(bus_ch, veh_id)
+            for other_ch in self.veh_table.values(veh_id)['other_chs']:
+                self.net_graph.add_edge(other_ch, veh_id)
+
+        elif (len(bus_candidates) == 0) and (len(ch_candidates) > 0):
+            if len(ch_candidates) == 1:
+                veh_ch = list(ch_candidates)[0]
+                ef = 0
+            else:
+                veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
+                                            zones, ch_candidates, config)  # determine the best from vehicles
+
+            self.veh_table.values(veh_id)['primary_ch'] = veh_ch
+            self.veh_table.values(veh_id)['counter'] = config.counter
+
+            self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
+
+            ch_candidates.remove(veh_ch)
+            self.veh_table.values(veh_id)['other_chs']. \
+                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
+            self.veh_table.values(veh_ch)['cluster_members'].add(veh_id)
+            self.veh_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
+            self.veh_table.values(veh_ch)['gate_chs']. \
+                update(self.veh_table.values(veh_ch)['gate_chs'].
+                       union(self.veh_table.values(veh_id)['other_chs']))
+            self.stand_alone.remove(veh_id)
+            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
+            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
+            self.net_graph.add_edge(veh_ch, veh_id)
+            for other_ch in self.veh_table.values(veh_id)['other_chs']:
+                self.net_graph.add_edge(other_ch, veh_id)
+
+    def multi_hop(self, veh_id, config, zones, bus_candidates,
+                  ch_candidates, other_vehs, second_ch_candidates):
+        pass
+
     def stand_alones_cluster(self, configs, zones):
         near_sa = dict()
         n_near_sa = dict()
@@ -475,7 +488,7 @@ class DataTable:
 
         unique_pot_ch = set(pot_ch.values())
         selected_chs = set()
-        mem_control = set()   # after a vehicle become a member, add it to this and at the beginning of the
+        mem_control = set()  # after a vehicle become a member, add it to this and at the beginning of the
         # for-loop, check if veh_id is in it to not do anything new and ruin it
         temp = self.stand_alone.copy()
         for veh_id in temp:
