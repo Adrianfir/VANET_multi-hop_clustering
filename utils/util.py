@@ -3,12 +3,13 @@ This is the utils file including the small functions
 """
 __author__: str = "Pouya 'Adrian' Firouzmakan"
 __all__ = [
-           'choose_ch', 'det_befit', 'det_border_speed_count', 'det_buses_other_ch', 'det_con_factor', 'det_dist',
-           'det_linkage_fac', 'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca', 'image_num',
-           'initiate_new_bus', 'initiate_new_veh', 'mac_address', 'make_slideshow', 'middle_zone', 'presence',
-           'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n', 'update_sa_net_graph', 'update_sai',
-           'update_veh_table'
-           ]
+    'choose_ch', 'choose_multihop_ch', 'det_befit', 'det_beta', 'det_border_speed_count', 'det_buses_other_ch',
+    'det_con_factor', 'det_dist', 'det_linkage_fac', 'det_near_ch', 'det_near_sa', 'det_pot_ch',
+    'det_pot_ch_dsca', 'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address', 'make_slideshow',
+    'middle_zone', 'presence', 'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n',
+    'update_sa_net_graph', 'update_sai',
+    'update_veh_table'
+]
 
 import numpy as np
 import random
@@ -312,6 +313,25 @@ def choose_ch(table, veh_table_i,
     return nominee, min_ef
 
 
+def choose_multihop_ch(veh_table, bus_table, veh_id, bus_candidates,
+                       ch_candidates, sub_ch_candidates, area_zones, candidates, config):
+    beta_ch, bet_bus = det_beta(bus_candidates, ch_candidates, sub_ch_candidates)
+
+
+def det_beta(bus_candidates, ch_candidates,
+             sub_ch_candidates):
+    num_bus: int = len(bus_candidates)
+    num_ch_sub_ch: int = len(ch_candidates) + len(sub_ch_candidates)
+
+    beta_ch = 1
+    beta_bus = 1
+    beta_bus = 0.70 if num_bus == num_ch_sub_ch else beta_bus
+    beta_bus = 0.80 if (2 <= (num_ch_sub_ch + 1) / (num_bus + 1) < 2.5) and (num_bus != 0) else beta_bus
+    beta_bus = 0.95 if (2.5 <= (num_ch_sub_ch + 1) / (num_bus + 1) < 4) and (num_bus != 0) else beta_bus
+
+    return beta_ch, bet_bus
+
+
 def update_bus_table(veh, bus_table, zone_id, understudied_area, zones, config, zone_buses, zone_ch, current_time):
     """
     this function updates the bus_tabel and zone_buses from main.py
@@ -472,7 +492,7 @@ def det_befit(veh_table, veh_id,
     # T_leave
     road = veh_table.values(veh_id)['lane']['id']
     if (":" in road) or ('cluster' in road):
-        return 0.0001           # because according to data, such edges are too short to be considered
+        return 0.0001  # because according to data, such edges are too short to be considered
     t = veh_table.values(veh_id)['lane']['timer']  # amount of time to cover distance "d"
     l = sumo_edges[road]['length']  # Length of the road segment
     from_node = sumo_edges[road]['from']
@@ -489,11 +509,11 @@ def det_befit(veh_table, veh_id,
 
     # Sai_v
     sai_v = veh_table.values(veh_id)['sai'] / (
-                1 + (config.iter * 0.01))              # (1 + (config.iter*0.01)) is for normalization
+            1 + (config.iter * 0.01))  # (1 + (config.iter*0.01)) is for normalization
 
     # Degree_n
     if len(veh_table.values(veh_id)['other_vehs']) > 0:
-        degree_n = update_degree_n(veh_table, veh_id)/len(veh_table.values(veh_id)['other_vehs'])
+        degree_n = update_degree_n(veh_table, veh_id) / len(veh_table.values(veh_id)['other_vehs'])
     else:
         degree_n = 0
 
@@ -789,8 +809,3 @@ def det_linkage_fac(veh_table, veh_id):
     for i in veh_table.values(veh_id)['other_vehs']:
         d_i += len(veh_table.values(i)['other_vehs'])
     return (0.5 * d) + (0.5 * d_i)
-
-
-
-
-
