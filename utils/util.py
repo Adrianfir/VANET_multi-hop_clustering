@@ -4,10 +4,10 @@ This is the utils file including the small functions
 __author__: str = "Pouya 'Adrian' Firouzmakan"
 __all__ = [
     'choose_ch', 'choose_multihop_ch', 'det_befit', 'det_beta', 'det_border_speed_count', 'det_buses_other_ch',
-    'det_con_factor', 'det_dist', 'det_linkage_fac', 'det_near_ch', 'det_near_sa', 'det_pot_ch',
-    'det_pot_ch_dsca', 'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address', 'make_slideshow',
-    'middle_zone', 'presence', 'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n',
-    'update_sa_net_graph', 'update_sai', 'update_veh_table'
+    'det_con_factor', 'det_dist', 'det_linkage_fac', 'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca',
+    'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address', 'make_slideshow', 'middle_zone', 'presence',
+    'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n', 'update_sa_net_graph', 'update_sai',
+    'update_veh_table'
 ]
 
 import numpy as np
@@ -319,6 +319,14 @@ def choose_multihop_ch(veh_table, bus_table, veh_id, bus_candidates,
 
 def det_beta(bus_candidates, ch_candidates,
              sub_ch_candidates):
+    """
+    This function would determine the beta coefficient that gives priority to the buses and other chs (or sub_chs)
+    based on the ratio of number of buses and number of chs(or sub_chs)
+    :param bus_candidates:
+    :param ch_candidates:
+    :param sub_ch_candidates:
+    :return:
+    """
     num_bus: int = len(bus_candidates)
     num_ch_sub_ch: int = len(ch_candidates) + len(sub_ch_candidates)
 
