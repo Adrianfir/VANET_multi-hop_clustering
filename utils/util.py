@@ -7,8 +7,7 @@ __all__ = [
     'det_con_factor', 'det_dist', 'det_linkage_fac', 'det_near_ch', 'det_near_sa', 'det_pot_ch',
     'det_pot_ch_dsca', 'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address', 'make_slideshow',
     'middle_zone', 'presence', 'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n',
-    'update_sa_net_graph', 'update_sai',
-    'update_veh_table'
+    'update_sa_net_graph', 'update_sai', 'update_veh_table'
 ]
 
 import numpy as np
