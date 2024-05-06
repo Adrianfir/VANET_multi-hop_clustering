@@ -328,7 +328,7 @@ def det_beta(bus_candidates, ch_candidates,
     beta_bus = 0.80 if (2 <= (num_ch_sub_ch + 1) / (num_bus + 1) < 2.5) and (num_bus != 0) else beta_bus
     beta_bus = 0.95 if (2.5 <= (num_ch_sub_ch + 1) / (num_bus + 1) < 4) and (num_bus != 0) else beta_bus
 
-    return beta_ch, bet_bus
+    return beta_ch, beta_bus
 
 
 def update_bus_table(veh, bus_table, zone_id, understudied_area, zones, config, zone_buses, zone_ch, current_time):
