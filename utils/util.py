@@ -314,7 +314,7 @@ def choose_ch(table, veh_table_i,
 
 def choose_multihop_ch(veh_table, bus_table, veh_id, bus_candidates,
                        ch_candidates, sub_ch_candidates, area_zones, candidates, config):
-    beta_ch, bet_bus = det_beta(bus_candidates, ch_candidates, sub_ch_candidates)
+    beta_ch, beta_bus = det_beta(bus_candidates, ch_candidates, sub_ch_candidates)
 
     # latitude of the centre of previous zone that vehicle were in
     prev_veh_lat = (area_zones.zone_hash.values(veh_table(veh_id).values['prev_zone'])['max_lat'] +
@@ -334,6 +334,45 @@ def choose_multihop_ch(veh_table, bus_table, veh_id, bus_candidates,
     veh_vector_y = np.multiply(euclidian_distance, np.sin(veh_alpha))
 
     min_ef = 1000000
+    for j in candidates:
+        beta, table = (beta_bus, bus_table) if 'bus' in j else (beta_ch, veh_table)
+
+        # latitude of the centre of previous zone that ch were in
+        prev_ch_lat = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_lat'] +
+                       area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_lat']) / 2
+        # latitude of the centre of previous zone that ch were in
+        prev_ch_long = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_long'] +
+                        area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_long']) / 2
+
+        euclidian_distance = hs.haversine((prev_ch_lat, prev_ch_long),
+                                          (table.values(j)['lat'], table.values(j)['long']),
+                                          unit=hs.Unit.METERS)
+
+        ch_alpha = np.arctan((prev_veh_long - veh_table.values.veh_id['long']) /
+                             (prev_veh_lat - veh_table.values.veh_id['lat']))
+
+        ch_vector_x = np.multiply(euclidian_distance, np.cos(ch_alpha))
+        ch_vector_y = np.multiply(euclidian_distance, np.sin(ch_alpha))
+
+        cos_sim = 1 - spatial.distance.cosine([veh_vector_x, veh_vector_y], [ch_vector_x, ch_vector_y])
+        theta_sim = np.arccos(cos_sim) / 2 * np.pi
+        theta_dist = euclidian_distance / min(table.values(j)['trans_range'], veh_table.values.veh_id['trans_range'])
+
+        # since it might return RuntimeWarning regarding the division, the warning will be ignored
+        with np.errstate(divide='ignore', invalid='ignore'):
+            speed_sim = np.divide(np.abs(table.values(j)['speed'] - veh_table.values.veh_id['speed']),
+                                  np.abs(table.values(j)['speed']))
+
+        # calculate the Eligibility Factor (EF) for chs
+        weights = np.divide(config.weights, sum(config.weights))  # normalizing the weights
+        ef = np.matmul(np.transpose(weights),
+                       np.array([theta_sim, speed_sim, theta_dist]))
+        ef *= beta
+        if ef < min_ef:
+            min_ef = ef
+            nominee = j
+    return nominee, min_ef
+
 
 def det_beta(bus_candidates, ch_candidates,
              sub_ch_candidates):
