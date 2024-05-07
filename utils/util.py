@@ -316,6 +316,24 @@ def choose_multihop_ch(veh_table, bus_table, veh_id, bus_candidates,
                        ch_candidates, sub_ch_candidates, area_zones, candidates, config):
     beta_ch, bet_bus = det_beta(bus_candidates, ch_candidates, sub_ch_candidates)
 
+    # latitude of the centre of previous zone that vehicle were in
+    prev_veh_lat = (area_zones.zone_hash.values(veh_table(veh_id).values['prev_zone'])['max_lat'] +
+                    area_zones.zone_hash.values(veh_table(veh_id).values['prev_zone'])['min_lat']) / 2
+    # longitude of the centre of previous zone that vehicle were in
+    prev_veh_long = (area_zones.zone_hash.values(veh_table(veh_id).values['prev_zone'])['max_long'] +
+                     area_zones.zone_hash.values(veh_table(veh_id).values['prev_zone'])['min_long']) / 2
+
+    euclidian_distance = hs.haversine((prev_veh_lat, prev_veh_long),
+                                      (veh_table(veh_id).values['lat'], veh_table(veh_id).values['long']),
+                                      unit=hs.Unit.METERS)
+
+    veh_alpha = np.arctan((prev_veh_long - veh_table(veh_id).values['long']) /
+                          (prev_veh_lat - veh_table(veh_id).values['lat']))
+
+    veh_vector_x = np.multiply(euclidian_distance, np.cos(veh_alpha))
+    veh_vector_y = np.multiply(euclidian_distance, np.sin(veh_alpha))
+
+    min_ef = 1000000
 
 def det_beta(bus_candidates, ch_candidates,
              sub_ch_candidates):
