@@ -524,7 +524,49 @@ class DataTable:
             for other_ch in self.veh_table.values(veh_id)['other_chs']:
                 self.net_graph.add_edge(other_ch, veh_id)
         elif ('veh' in ch) and (self.veh_table.values(ch)['sub_cluster_head'] is True):
-            pass
+            sub_ch = ch
+            veh_ch = self.veh_table.values(sub_ch)['primary_ch']
+            self.veh_table.values(veh_id)['primary_ch'] = veh_ch
+            self.veh_table.values(veh_id)['secondary_ch'] = sub_ch
+            self.veh_table.values(veh_id)['counter'] = config.counter
+
+            self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
+            self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
+
+            if 'bus' not in veh_ch:
+                ch_candidates.remove(veh_ch)
+                # if a vehicle is added as sub_member, it would be in both sub_cluster_members
+                # and cluster_members of the CH
+                self.veh_table.values(veh_ch)['cluster_members'].add(veh_id)
+                self.veh_table.values(veh_ch)['sub_cluster_members'].add(veh_id)
+                self.veh_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
+                self.veh_table.values(veh_ch)['gate_chs']. \
+                    update(self.veh_table.values(veh_ch)['gate_chs'].
+                           union(self.veh_table.values(veh_id)['other_chs']))
+            else:
+                bus_candidates.remove(veh_ch)
+                # if a vehicle is added as sub_member, it would be in both sub_cluster_members
+                # and cluster_members of the CH
+                self.bus_table.values(veh_ch)['cluster_members'].add(veh_id)
+                self.bus_table.values(veh_ch)['sub_cluster_members'].add(veh_id)
+                self.bus_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
+                self.bus_table.values(veh_ch)['gate_chs']. \
+                    update(self.veh_table.values(veh_ch)['gate_chs'].
+                           union(self.veh_table.values(veh_id)['other_chs']))
+
+            self.veh_table.values(veh_id)['other_chs']. \
+                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
+            self.veh_table.values(veh_id)['other_chs']. \
+                update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
+            self.veh_table.values(sub_ch)['sub_cluster_members'].add(veh_id)
+            self.stand_alone.remove(veh_id)
+            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
+            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
+            self.net_graph.add_edge(veh_ch, veh_id)
+            for other_ch in self.veh_table.values(veh_id)['other_chs']:
+                self.net_graph.add_edge(other_ch, veh_id)
 
     def stand_alones_cluster(self, configs, zones):
         near_sa = dict()
