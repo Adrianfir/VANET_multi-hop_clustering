@@ -208,6 +208,7 @@ def det_near_ch(veh_id, veh_table, bus_table,
                 ch_candidates.add(j)
             elif veh_table.values(j)['sub_cluster_head'] is True:
                 sub_ch_candidates.add(j)
+                other_vehs.add(j)
             else:
                 other_vehs.add(j)
 
