@@ -240,10 +240,10 @@ class DataTable:
             (bus_candidates, ch_candidates,
              sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
                                                                self.zone_buses, self.zone_vehicles)
-            if (len(bus_candidates) == 0) and (len(ch_candidates) == 0) and \
-                    (self.veh_table.values(veh_id)['in_area'] is True) and \
-                    (self.veh_table.values(veh_id)['primary_ch'] is None) and \
-                    (self.veh_table.values(veh_id)['cluster_head'] is False):
+            if ((len(bus_candidates) == 0) and (len(ch_candidates) == 0) and (len(sub_ch_candidates) == 0) and
+                    (self.veh_table.values(veh_id)['in_area'] is True) and
+                    (self.veh_table.values(veh_id)['primary_ch'] is None) and
+                    (self.veh_table.values(veh_id)['cluster_head'] is False)):
                 if self.veh_table.values(veh_id)['counter'] >= 1:
                     self.veh_table.values(veh_id)['counter'] -= 1
                     self.stand_alone.add(veh_id)
@@ -267,17 +267,22 @@ class DataTable:
                 temp_mem = self.veh_table.values(veh_id)['cluster_members'].copy()
                 # print(temp_mem)
                 for m in temp_mem:
-                    dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
+                    if self.veh_table.values(m)['secondary_ch'] is None:
+                        dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
 
-                    if dist > min(self.veh_table.values(veh_id)['trans_range'],
-                                  self.veh_table.values(m)['trans_range']):
-                        self.veh_table.values(veh_id)['cluster_members'].remove(m)
-                        self.veh_table.values(m)['primary_ch'] = None
-                        self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
-                                                                                 'timer': None})
-                        self.stand_alone.add(m)
-                        self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
-                        self.net_graph.remove_edge(veh_id, m)
+                        if dist > min(self.veh_table.values(veh_id)['trans_range'],
+                                      self.veh_table.values(m)['trans_range']):
+                            self.veh_table.values(veh_id)['cluster_members'].remove(m)
+                            self.veh_table.values(m)['primary_ch'] = None
+                            self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
+                                                                                     'timer': None})
+                            self.stand_alone.add(m)
+                            self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
+                            self.net_graph.remove_edge(veh_id, m)
+                    else:
+                        sec_ch = self.veh_table.values(m)['secondary_ch']
+                        dist = util.det_dist(sec_ch, self.veh_table, m, self.veh_table)
+
 
                 # if the veh_id is a ch and does not have any member, after changing its zone, it won't remain as a ch
                 # unless get selected by another vehicles or can't find a cluster head after the counter
