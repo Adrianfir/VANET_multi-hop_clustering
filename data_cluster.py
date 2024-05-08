@@ -237,8 +237,9 @@ class DataTable:
             self.veh_table.values(veh_id)['other_vehs'] = set()
 
             # determining the buses and cluster_head in neighbor zones
-            bus_candidates, ch_candidates, other_vehs = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
-                                                                         self.zone_buses, self.zone_vehicles)
+            (bus_candidates, ch_candidates,
+             sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
+                                                               self.zone_buses, self.zone_vehicles)
             if (len(bus_candidates) == 0) and (len(ch_candidates) == 0) and \
                     (self.veh_table.values(veh_id)['in_area'] is True) and \
                     (self.veh_table.values(veh_id)['primary_ch'] is None) and \
@@ -372,8 +373,8 @@ class DataTable:
                     self.single_hop(veh_id, config, zones,
                                     bus_candidates, ch_candidates, other_vehs)
                 else:
-                    self.multi_hop(veh_id, config, zones, bus_candidates,
-                                   ch_candidates, other_vehs, second_ch_candidates)
+                    self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, sub_ch_candidates,
+                                   other_vehs)
 
         # finding buses' other_chs
         for bus in self.bus_table.ids():
@@ -465,8 +466,10 @@ class DataTable:
                 self.net_graph.add_edge(other_ch, veh_id)
 
     def multi_hop(self, veh_id, config, zones, bus_candidates,
-                  ch_candidates, other_vehs, second_ch_candidates):
-        pass
+                  ch_candidates, sub_ch_candidates, other_vehs):
+
+        ch, ef = util.choose_multihop_ch(veh_id, self.veh_table, self.bus_table, bus_candidates,
+                                         ch_candidates, sub_ch_candidates, zones, config)
 
     def stand_alones_cluster(self, configs, zones):
         near_sa = dict()

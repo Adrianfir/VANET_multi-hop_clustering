@@ -184,6 +184,7 @@ def det_near_ch(veh_id, veh_table, bus_table,
     """
     bus_candidates = set()
     ch_candidates = set()
+    sub_ch_candidates = set()
     other_vehs = set()
     neigh_bus = []
     neigh_veh = []
@@ -205,10 +206,12 @@ def det_near_ch(veh_id, veh_table, bus_table,
                                  veh_table.values(j)['trans_range']):
             if veh_table.values(j)['cluster_head'] is True:
                 ch_candidates.add(j)
+            elif veh_table.values(j)['sub_cluster_head'] is True:
+                sub_ch_candidates.add(j)
             else:
                 other_vehs.add(j)
 
-    return bus_candidates, ch_candidates, other_vehs
+    return bus_candidates, ch_candidates, sub_ch_candidates, other_vehs
 
 
 def det_buses_other_ch(bus_id, veh_table, bus_table,
@@ -312,8 +315,8 @@ def choose_ch(table, veh_table_i,
     return nominee, min_ef
 
 
-def choose_multihop_ch(veh_table, bus_table, veh_id, bus_candidates,
-                       ch_candidates, sub_ch_candidates, area_zones, candidates, config):
+def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
+                       ch_candidates, sub_ch_candidates, area_zones, config):
     beta_ch, beta_bus = det_beta(bus_candidates, ch_candidates, sub_ch_candidates)
 
     # latitude of the centre of previous zone that vehicle were in
@@ -334,7 +337,7 @@ def choose_multihop_ch(veh_table, bus_table, veh_id, bus_candidates,
     veh_vector_y = np.multiply(euclidian_distance, np.sin(veh_alpha))
 
     min_ef = 1000000
-    for j in candidates:
+    for j in bus_candidates.union(ch_candidates, sub_ch_candidates):
         beta, table = (beta_bus, bus_table) if 'bus' in j else (beta_ch, veh_table)
 
         # latitude of the centre of previous zone that ch were in
