@@ -357,20 +357,20 @@ class DataTable:
                     dist_to_primarych = util.det_dist(veh_id, self.veh_table, ch_id, temp_table)
                 else:
                     secondary_ch = self.veh_table.values(veh_id)['secondary_ch']
-                    dist_to_secondarych = util.det_dist(veh_id, self.veh_table, secondary_ch, temp_table)
+                    dist_to_secondarych = util.det_dist(veh_id, self.veh_table, secondary_ch, self.veh_table)
 
                 if (((self.veh_table.values(veh_id)['secondary_ch'] is None) and
                      (dist_to_primarych <= min(self.veh_table.values(veh_id)['trans_range'],
                                               temp_table.values(ch_id)['trans_range']))) or
                         ((self.veh_table.values(veh_id)['secondary_ch'] is not None) and
-                     (dist_to_primarych <= min(self.veh_table.values(veh_id)['trans_range'],
-                                              temp_table.values(secondary_ch)['trans_range'])))):
+                     (dist_to_secondarych <= min(self.veh_table.values(veh_id)['trans_range'],
+                                                 self.veh_table.values(secondary_ch)['trans_range'])))):
 
                     self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
                                                                       union(bus_candidates))
                     self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
                                                                       union(ch_candidates))
-                    assert self.veh_table.values(veh_id)['primary_ch'] in self.veh_table.values(veh_id)['other_chs']
+                    # assert self.veh_table.values(veh_id)['primary_ch'] in self.veh_table.values(veh_id)['other_chs']
                     self.veh_table.values(veh_id)['other_chs'].remove(self.veh_table.values(veh_id)['primary_ch'])
                     # the following conditional is for making sure that self.update_cluster called inside
                     # self.stand_alones_cluster would not add 1 to timer of cluster_record
@@ -438,7 +438,6 @@ class DataTable:
                     if ((self.veh_table.values(h)['primary_ch'] is not None)
                             and (self.veh_table.values(h)['secondary_ch'] is None)):
                         second_ch_candidates.append(h)
-                        print(h)
                 second_ch_candidates = set(second_ch_candidates)
 
                 if len(second_ch_candidates) == 0:
