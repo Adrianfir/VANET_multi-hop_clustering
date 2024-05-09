@@ -6,8 +6,8 @@ __all__ = [
     'choose_ch', 'choose_multihop_ch', 'det_befit', 'det_beta', 'det_border_speed_count', 'det_buses_other_ch',
     'det_con_factor', 'det_dist', 'det_linkage_fac', 'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca',
     'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address', 'make_slideshow', 'middle_zone', 'presence',
-    'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n', 'update_sa_net_graph', 'update_sai',
-    'update_veh_table'
+    'priority_clusters', 'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n', 'update_sa_net_graph',
+    'update_sai', 'update_veh_table'
 ]
 
 import numpy as np
@@ -102,6 +102,8 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 sub_cluster_head=False,  # if it is a sub_ch, it will be True
                 primary_ch=None,
                 secondary_ch=None,
+                priority_ch=None,
+                priority_counter=config.priority_counter,
                 sub_chs=set(),  # Stores sub_cluster_heads ids if the vehicle is a cluster_head
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),  # This will be a Graph if the vehicle is a ch
@@ -373,13 +375,33 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
                        np.array([theta_sim, speed_sim, theta_dist]))
         ef = np.average(ef, table.values(j)['cluster_record']['ef']) if table.values(j)['sub_cluster_head'] is True \
             else ef
-        ef *= beta      # the way beta is working is that if both chs, sub_chs, and buses are nearby, the beta
+        ef *= beta  # the way beta is working is that if both chs, sub_chs, and buses are nearby, the beta
         # related to the buses would be multiplied if the connection would be single-hop not multi-hop. Hence, for a
         # sub_ch connected to a buss the beta would be same as beta for chs
         if ef < min_ef:
             min_ef = ef
             nominee = j
     return nominee, min_ef
+
+
+def priority_clusters(veh_id, veh_table, bus_candidates,
+                      ch_candidates, sub_ch_candidates):
+    """
+    This function would just consider the sub_chs that are belong to the previous cluster that veh_id used to be in it
+    and disregard the rest of the chs and buses nearby
+    :param veh_id:
+    :param veh_table:
+    :param bus_candidates:
+    :param ch_candidates:
+    :param sub_ch_candidates:
+    :return:
+    """
+    sub_ch_candidates_priorities = set([i for i in sub_ch_candidates if
+                                        veh_table.values(i)['primary_ch'] == veh_table.values(veh_id)['priority_ch']])
+    (sub_ch_candidates_priorities, ch_candidates, bus_candidates) = (sub_ch_candidates, ch_candidates, bus_candidates) \
+        if len(sub_ch_candidates_priorities) == 0 else (sub_ch_candidates_priorities, set(), set())
+
+    return bus_candidates, ch_candidates, sub_ch_candidates_priorities
 
 
 def det_beta(bus_candidates, ch_candidates,

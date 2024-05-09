@@ -33,6 +33,7 @@ class Inputs:
         start_time = 1600
         iter = 100
         counter = 4
+        priority_counter = int(np.floor(counter / 2))
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10
@@ -62,6 +63,9 @@ class Inputs:
         parser.add_argument('--counter', type=int, default=counter,
                             help='This is the a counter for vehicle to make themselves as CH if they can not'
                                  ' find any Ch or nearby stand-alone vehicles to create a cluster')
+        parser.add_argument('--priority_counter', type=int, default=priority_counter,
+                            help='This is the a counter for vehicle to join same cluster through sub_chs after leaving '
+                                 'that cluster')
         parser.add_argument('--map_zoom', type=float, default=map_zoom,
                             help='This is the amount to have a specific zoom on the map')
         parser.add_argument('--center_loc', type=float, default=center_loc,
