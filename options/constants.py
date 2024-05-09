@@ -14,7 +14,7 @@ class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
         trace_path = str(pathlib.Path(__file__).parent.parent.absolute().
-                         joinpath('final_data_Richmondhill', 'sumoTrace_no_bus_and_rsu.xml'))
+                         joinpath('final_data_Richmondhill', 'sumoTrace.xml'))
         sumo_edge_path = str(pathlib.Path(__file__).parent.parent.absolute().
                              joinpath('final_data_Richmondhill', 'osm.net.xml'))
         sumo_node_path = str(pathlib.Path(__file__).parent.parent.absolute().
@@ -30,10 +30,10 @@ class Inputs:
                     max_long=-79.238069)
         alpha = 1
         trans_range = 200
-        start_time = 10
+        start_time = 1900
         iter = 100
-        counter = 4
-        priority_counter = int(np.floor(counter / 2))
+        counter = 15
+        priority_counter = 3
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10

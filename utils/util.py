@@ -373,8 +373,9 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
         weights = np.divide(config.weights, sum(config.weights))  # normalizing the weights
         ef = np.matmul(np.transpose(weights),
                        np.array([theta_sim, speed_sim, theta_dist]))
-        ef = np.average(ef, table.values(j)['cluster_record']['ef']) if table.values(j)['sub_cluster_head'] is True \
-            else ef
+        ef = np.average([ef, table.values(j)['cluster_record'].tail.value['ef'] \
+            if (('veh' in j) and (table.values(j)['primary_ch'] is not None)
+                and (table.values(j)['secondary_ch'] is None)) else ef])
         ef *= beta  # the way beta is working is that if both chs, sub_chs, and buses are nearby, the beta
         # related to the buses would be multiplied if the connection would be single-hop not multi-hop. Hence, for a
         # sub_ch connected to a buss the beta would be same as beta for chs

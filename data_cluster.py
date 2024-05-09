@@ -433,13 +433,19 @@ class DataTable:
                     (self.veh_table.values(veh_id)['primary_ch'] is None) and \
                     (self.veh_table.values(veh_id)['cluster_head'] is False):
 
-                second_ch_candidates = [h for h in other_vehs if (self.veh_table.values(h)['primary_ch'] is not None)
-                                        and (self.veh_table.values(h)['secondary_ch'] is None)]
+                second_ch_candidates = []
+                for h in other_vehs:
+                    if ((self.veh_table.values(h)['primary_ch'] is not None)
+                            and (self.veh_table.values(h)['secondary_ch'] is None)):
+                        second_ch_candidates.append(h)
+                        print(h)
+                second_ch_candidates = set(second_ch_candidates)
+
                 if len(second_ch_candidates) == 0:
                     self.single_hop(veh_id, config, zones,
                                     bus_candidates, ch_candidates, other_vehs)
                 else:
-                    self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, sub_ch_candidates,
+                    self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, second_ch_candidates,
                                    other_vehs)
 
         # finding buses' other_chs
@@ -573,7 +579,7 @@ class DataTable:
             for other_ch in self.veh_table.values(veh_id)['other_chs']:
                 self.net_graph.add_edge(other_ch, veh_id)
 
-        elif ('veh' in ch) and (self.veh_table.values(ch)['sub_cluster_head'] is False):
+        elif ('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True):
             veh_ch = ch
             self.veh_table.values(veh_id)['primary_ch'] = veh_ch
             self.veh_table.values(veh_id)['counter'] = config.counter
@@ -597,7 +603,7 @@ class DataTable:
             self.net_graph.add_edge(veh_ch, veh_id)
             for other_ch in self.veh_table.values(veh_id)['other_chs']:
                 self.net_graph.add_edge(other_ch, veh_id)
-        elif ('veh' in ch) and (self.veh_table.values(ch)['sub_cluster_head'] is True):
+        elif ('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is False):
             sub_ch = ch
             veh_ch = self.veh_table.values(sub_ch)['primary_ch']
             self.veh_table.values(veh_id)['primary_ch'] = veh_ch
