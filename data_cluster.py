@@ -633,7 +633,7 @@ class DataTable:
                 self.bus_table.values(veh_ch)['sub_cluster_members'].add(veh_id)
                 self.bus_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
                 self.bus_table.values(veh_ch)['gate_chs']. \
-                    update(self.veh_table.values(veh_ch)['gate_chs'].
+                    update(self.bus_table.values(veh_ch)['gate_chs'].
                            union(self.veh_table.values(veh_id)['other_chs']))
 
             self.veh_table.values(veh_id)['other_chs']. \
