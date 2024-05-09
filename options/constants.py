@@ -28,9 +28,9 @@ class Inputs:
                     min_long=-79.540771,
                     max_lat=44.012923,
                     max_long=-79.238069)
-        alpha = 0.5
+        alpha = 1
         trans_range = 200
-        start_time = 1600
+        start_time = 10
         iter = 100
         counter = 4
         priority_counter = int(np.floor(counter / 2))

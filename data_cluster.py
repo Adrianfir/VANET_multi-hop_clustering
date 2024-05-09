@@ -433,7 +433,8 @@ class DataTable:
                     (self.veh_table.values(veh_id)['primary_ch'] is None) and \
                     (self.veh_table.values(veh_id)['cluster_head'] is False):
 
-                second_ch_candidates = [h for h in other_vehs if self.veh_table.values(h)['sub_cluster_head']]
+                second_ch_candidates = [h for h in other_vehs if (self.veh_table.values(h)['primary_ch'] is not None)
+                                        and (self.veh_table.values(h)['secondary_ch'] is None)]
                 if len(second_ch_candidates) == 0:
                     self.single_hop(veh_id, config, zones,
                                     bus_candidates, ch_candidates, other_vehs)
