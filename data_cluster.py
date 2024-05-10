@@ -352,8 +352,8 @@ class DataTable:
                     temp_table = self.bus_table
                 else:
                     temp_table = self.veh_table
+                ch_id = self.veh_table.values(veh_id)['primary_ch']
                 if self.veh_table.values(veh_id)['secondary_ch'] is None:
-                    ch_id = self.veh_table.values(veh_id)['primary_ch']
                     secondary_ch = None
                     dist_to_primarych = util.det_dist(veh_id, self.veh_table, ch_id, temp_table)
                 else:
@@ -413,8 +413,6 @@ class DataTable:
                         self.veh_table.values(ch_id)['cluster_members'].remove(veh_id)
                         if secondary_ch is not None:
                             self.veh_table.values(ch_id)['sub_cluster_members'].remove(veh_id)
-                            self.veh_table.values(ch_id)['sub_cluster_head'] = False if (
-                                    len(self.veh_table.values(ch_id)['sub_cluster_members']) == 0) else True
                     self.veh_table.values(veh_id)['priority_ch'] = ch_id
                     self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
                     self.net_graph.remove_edge(ch_id, veh_id)
