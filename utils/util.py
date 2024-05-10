@@ -99,7 +99,6 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 message_dest={},
                 message_source={},
                 cluster_head=False,  # if the vehicle is a ch, it will be True
-                sub_cluster_head=False,  # if it is a sub_ch, it will be True
                 primary_ch=None,
                 secondary_ch=None,
                 priority_ch=None,
@@ -208,10 +207,10 @@ def det_near_ch(veh_id, veh_table, bus_table,
                                  veh_table.values(j)['trans_range']):
             if veh_table.values(j)['cluster_head'] is True:
                 ch_candidates.add(j)
-            elif veh_table.values(j)['sub_cluster_head'] is True:
+            elif veh_table.values(j)['primary_ch'] is not None:
                 sub_ch_candidates.add(j)
                 other_vehs.add(j)
-            else:
+            elif veh_table.values(j)['primary_ch'] is None:
                 other_vehs.add(j)
 
     return bus_candidates, ch_candidates, sub_ch_candidates, other_vehs
