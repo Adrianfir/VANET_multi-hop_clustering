@@ -216,10 +216,6 @@ class DataTable:
                     self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
                     self.veh_table.values(m)['primary_ch'] = None
                     self.veh_table.values(m)['secondary_ch'] = None
-                    self.veh_table.values(self.veh_table.values(m)['secondary_ch'])['sub_cluster_head'] = False if (
-                        len(self.veh_table.values(self.veh_table.values(m)['secondary_ch'])[
-                                'sub_cluster_members'] == 0)) \
-                        else True
                     self.veh_table.values(m)['counter'] = config.counter
                     self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
                                                                              'timer': None})
@@ -489,7 +485,8 @@ class DataTable:
                 update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
             self.veh_table.values(veh_id)['other_chs']. \
                 update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-            self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
+            if bus_ch in self.veh_table.values(veh_id)['other_chs']:
+                self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
             self.bus_table.values(bus_ch)['cluster_members'].add(veh_id)
             self.bus_table.values(bus_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
             self.bus_table.values(bus_ch)['gate_chs']. \
@@ -561,7 +558,8 @@ class DataTable:
                 update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
             self.veh_table.values(veh_id)['other_chs']. \
                 update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-            self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
+            if bus_ch in self.veh_table.values(veh_id)['other_chs']:
+                self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
             self.bus_table.values(bus_ch)['cluster_members'].add(veh_id)
             self.bus_table.values(bus_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
             self.bus_table.values(bus_ch)['gate_chs']. \
