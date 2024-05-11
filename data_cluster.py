@@ -464,12 +464,9 @@ class DataTable:
     def single_hop(self, veh_id, config, zones,
                    bus_candidates, ch_candidates, other_vehs):
         if len(bus_candidates) > 0:
-            if len(bus_candidates) == 1:
-                bus_ch = list(bus_candidates)[0]
-                ef = 0
-            else:
-                bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
-                                            bus_candidates, config)  # determine the best from bus_candidates
+
+            bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
+                                        bus_candidates, config)  # determine the best from bus_candidates
 
             self.veh_table.values(veh_id)['primary_ch'] = bus_ch
 
@@ -500,12 +497,9 @@ class DataTable:
                 self.net_graph.add_edge(other_ch, veh_id)
 
         elif (len(bus_candidates) == 0) and (len(ch_candidates) > 0):
-            if len(ch_candidates) == 1:
-                veh_ch = list(ch_candidates)[0]
-                ef = 0
-            else:
-                veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
-                                            zones, ch_candidates, config)  # determine the best from vehicles
+
+            veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
+                                        zones, ch_candidates, config)  # determine the best from vehicles
 
             self.veh_table.values(veh_id)['primary_ch'] = veh_ch
             self.veh_table.values(veh_id)['counter'] = config.counter
@@ -650,8 +644,7 @@ class DataTable:
         n_near_sa = dict()
         pot_ch = dict()
         for veh_id in self.stand_alone:
-            if self.veh_table.values(veh_id)['cluster_head'] is True:
-                print('2: ', veh_id)
+            assert self.veh_table.values(veh_id)['cluster_head'] is False
             near_sa[veh_id] = util.det_near_sa(veh_id, self.veh_table,
                                                self.stand_alone, self.zone_stand_alone
                                                )
