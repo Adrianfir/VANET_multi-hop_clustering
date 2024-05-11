@@ -162,9 +162,6 @@ class DataTable:
                 self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
                 self.veh_table.values(m)['primary_ch'] = None
                 self.veh_table.values(m)['secondary_ch'] = None
-                self.veh_table.values(self.veh_table.values(m)['secondary_ch'])['sub_cluster_head'] = False if (
-                    len(self.veh_table.values(self.veh_table.values(m)['secondary_ch'])['sub_cluster_members'] == 0)) \
-                    else True
                 self.veh_table.values(m)['counter'] = config.counter
                 self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
                                                                          'timer': None})
@@ -643,6 +640,7 @@ class DataTable:
         near_sa = dict()
         n_near_sa = dict()
         pot_ch = dict()
+        print(self.stand_alone)
         for veh_id in self.stand_alone:
             assert self.veh_table.values(veh_id)['cluster_head'] is False
             near_sa[veh_id] = util.det_near_sa(veh_id, self.veh_table,

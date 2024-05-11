@@ -51,8 +51,6 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
                 message_dest={},
                 message_source={},
                 cluster_head=True,
-                sub_cluster_head=False,  # Its always False for a bus
-                sub_chs=set(),  # Stores sub_cluster_heads ids
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),
                 sub_cluster_members=set(),
@@ -103,7 +101,6 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 secondary_ch=None,
                 priority_ch=None,
                 priority_counter=config.priority_counter,
-                sub_chs=set(),  # Stores sub_cluster_heads ids if the vehicle is a cluster_head
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),  # This will be a Graph if the vehicle is a ch
                 sub_cluster_members=set(),
