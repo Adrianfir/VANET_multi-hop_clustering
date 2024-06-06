@@ -12,6 +12,8 @@ import networkx as nx
 import folium
 from folium.plugins import MarkerCluster
 import webbrowser
+import sys
+import pytest
 
 from graph import Graph
 import utils.util as util
@@ -148,6 +150,7 @@ class DataTable:
                                                                    float(veh.getAttribute('x'))
                                                                    )
                                           )
+
         # removing the buses, that have left the understudied area, from self.bus_table and self.zone_buses
         for k in (self.bus_table.ids() - bus_ids):
             for m in self.bus_table.values(k)['cluster_members']:
@@ -397,7 +400,7 @@ class DataTable:
                                                 temp_table.values(ch_id)['trans_range']))) or
                       ((self.veh_table.values(veh_id)['secondary_ch'] is not None) and
                        (dist_to_secondarych > min(self.veh_table.values(veh_id)['trans_range'],
-                                                self.veh_table.values(secondary_ch)['trans_range'])))):
+                                                  self.veh_table.values(secondary_ch)['trans_range'])))):
                     if 'bus' in ch_id:
                         self.bus_table.values(ch_id)['cluster_members'].remove(veh_id)
                         if secondary_ch is not None:
@@ -435,6 +438,8 @@ class DataTable:
                 else:
                     self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, second_ch_candidates,
                                    other_vehs)
+
+            self.check_general_framework(veh_id)
 
         # finding buses' other_chs
         for bus in self.bus_table.ids():
@@ -522,6 +527,8 @@ class DataTable:
             for other_ch in self.veh_table.values(veh_id)['other_chs']:
                 self.net_graph.add_edge(other_ch, veh_id)
 
+        self.check_general_framework(veh_id)
+
     def multi_hop(self, veh_id, config, zones, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
         if self.veh_table.values(veh_id)['priority_counter'] != 0:
@@ -600,7 +607,7 @@ class DataTable:
             self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
 
             if 'bus' not in veh_ch:
-                if veh_ch in ch_candidates:     # in multi-hop and when the vehicle joining the cluster through sub_ch,
+                if veh_ch in ch_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
                     # the veh_ch might not be in the ch_candidates
                     ch_candidates.remove(veh_ch)
                 # if a vehicle is added as sub_member, it would be in both sub_cluster_members
@@ -612,7 +619,7 @@ class DataTable:
                     update(self.veh_table.values(veh_ch)['gate_chs'].
                            union(self.veh_table.values(veh_id)['other_chs']))
             else:
-                if veh_ch in bus_candidates:    # in multi-hop and when the vehicle joining the cluster through sub_ch,
+                if veh_ch in bus_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
                     # the veh_ch might not be in the bus_candidates
                     bus_candidates.remove(veh_ch)
                 # if a vehicle is added as sub_member, it would be in both sub_cluster_members
@@ -636,13 +643,14 @@ class DataTable:
             for other_ch in self.veh_table.values(veh_id)['other_chs']:
                 self.net_graph.add_edge(other_ch, veh_id)
 
+        self.check_general_framework(veh_id)
+
     def stand_alones_cluster(self, configs, zones):
         near_sa = dict()
         n_near_sa = dict()
         pot_ch = dict()
-        print(self.stand_alone)
         for veh_id in self.stand_alone:
-            assert self.veh_table.values(veh_id)['cluster_head'] is False
+            self.stand_alone_test(veh_id)
             near_sa[veh_id] = util.det_near_sa(veh_id, self.veh_table,
                                                self.stand_alone, self.zone_stand_alone
                                                )
@@ -887,3 +895,38 @@ class DataTable:
     def print_table(self):
         self.bus_table.print_hash_table()
         self.veh_table.print_hash_table()
+
+    def check_general_framework(self, veh_id):
+        """
+        this test is to check if the veh_table is a cluster_head and inside another class at a same time
+        :param veh_id:
+        :return:
+        """
+        try:
+            assert (
+                    ((self.veh_table.values(veh_id)['cluster_head'] is True) and
+                    (self.veh_table.values(veh_id)['primary_ch'] is None)) or
+                    ((self.veh_table.values(veh_id)['cluster_head'] is False) and
+                     (self.veh_table.values(veh_id)['primary_ch'] is not None)) or
+                    ((self.veh_table.values(veh_id)['cluster_head'] is False) and
+                     (self.veh_table.values(veh_id)['primary_ch'] is None) and
+                     (veh_id in self.stand_alone))
+                    )
+        except AssertionError:
+            print(f'the error happens for {veh_id} at {self.time}')
+            sys.exit(1)
+
+    def stand_alone_test(self, veh_id):
+        """
+        this test is to check if a stand_alone vehicle is not in a cluster or is a cluster_head
+        :param veh_id:
+        :return:
+        """
+        try:
+            assert ((self.veh_table.values(veh_id)['cluster_head'] is False) and
+                    ((veh_id in self.stand_alone) and
+                     (self.veh_table.values(veh_id)['primary_ch'] is None)))
+        except AssertionError:
+            print(f'the error happens for {veh_id} at {self.time}')
+            print()
+            sys.exit(1)
