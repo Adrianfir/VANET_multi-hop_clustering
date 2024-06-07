@@ -2,7 +2,6 @@
 This cass is for define a LinkedList to be sed in Hash_Table
 """
 
-
 class Node:
     def __init__(self, key, value):
         self.key = key

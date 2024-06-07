@@ -200,6 +200,17 @@ class DataTable:
                                                                                  'timer': None})
                         self.stand_alone.add(m)
                         self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
+                for m in self.veh_table.values(k)['sub_cluster_members']:
+                    if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
+                        self.veh_table.values(m)['priority_ch'] = None
+                        self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                        self.veh_table.values(m)['secondary_ch'] = None
+                        self.veh_table.values(m)['counter'] = config.counter
+                        self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
+                                                                                 'timer': None})
+
+                        self.stand_alone.add(m)
+                        self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
                 self.zone_ch[self.veh_table.values(k)['zone']].remove(k)
                 self.veh_table.values(k)['cluster_head'] = False
                 self.all_chs.remove(k)
@@ -215,17 +226,6 @@ class DataTable:
             elif k in self.stand_alone:
                 self.stand_alone.remove(k)
                 self.zone_stand_alone[self.veh_table.values(k)['zone']].remove(k)
-
-            for m in self.veh_table.values(k)['sub_cluster_members']:
-                if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
-                    self.veh_table.values(m)['priority_ch'] = None
-                    self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                    self.veh_table.values(m)['secondary_ch'] = None
-                    self.veh_table.values(m)['counter'] = config.counter
-                    self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
-                                                                             'timer': None})
-                    self.stand_alone.add(m)
-                    self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
 
             self.zone_vehicles[self.veh_table.values(k)['zone']].remove(k)
             self.veh_table.values(k)['depart_time'] = self.time - 1
@@ -287,7 +287,7 @@ class DataTable:
                     (self.veh_table.values(veh_id)['cluster_head'] is True):
 
                 temp_mem = self.veh_table.values(veh_id)['cluster_members'].copy()
-                # print(temp_mem)
+
                 for m in temp_mem:
                     if self.veh_table.values(m)['secondary_ch'] is None:
                         dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
@@ -444,6 +444,7 @@ class DataTable:
                                    other_vehs)
 
             self.check_general_framework(veh_id)
+            self.test_ef(veh_id)
 
         # finding buses' other_chs
         for bus in self.bus_table.ids():
@@ -534,6 +535,7 @@ class DataTable:
                 self.net_graph.add_edge(other_ch, veh_id)
 
         self.check_general_framework(veh_id)
+        self.test_ef(veh_id)
 
     def multi_hop(self, veh_id, config, zones, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
@@ -652,6 +654,7 @@ class DataTable:
                 self.net_graph.add_edge(other_ch, veh_id)
 
         self.check_general_framework(veh_id)
+        self.test_ef(veh_id)
 
     def stand_alones_cluster(self, configs, zones):
         near_sa = dict()
@@ -705,13 +708,9 @@ class DataTable:
                     continue
 
             if len(unique_pot_ch.intersection(near_sa[veh_id]) - mem_control) > 0:
-                if ((len(unique_pot_ch.intersection(near_sa[veh_id])) == 1) and
-                        (self.veh_table.values(list(near_sa[veh_id])[0])['primary_ch'] is None)):
-                    ch = list(near_sa[veh_id])[0]
-                    ef = 0
-                else:
-                    ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
-                                            unique_pot_ch.intersection(near_sa[veh_id]) - mem_control, configs)
+
+                ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
+                                        unique_pot_ch.intersection(near_sa[veh_id]) - mem_control, configs)
                 selected_chs.add(ch)
 
                 self.veh_table.values(ch)['cluster_head'] = True
@@ -742,6 +741,7 @@ class DataTable:
                 except KeyError:
                     pass
                 continue
+            self.test_ef(veh_id)
 
         # Determining the updating self.veh_tale and self.net_graph
         for k in near_sa.keys():
@@ -943,5 +943,18 @@ class DataTable:
             print(f'the error happens for {veh_id} at {self.time} \n '
                   f'this test is to check if a stand_alone vehicle is not in a cluster or is a cluster_head \n'
                   f'{self.veh_table.values(veh_id)}')
-            print()
+            sys.exit(1)
+
+    def test_ef(self, veh_id):
+        """
+        this test is to check if ef is zero for a vehicle in a cluster
+        :param veh_id:
+        :return:
+        """
+        try:
+            assert self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] != 0
+        except AssertionError:
+            print(f'the error happens for {veh_id} at {self.time} \n '
+                  f'this test is to check if ef is zero for a vehicle in a cluster \n'
+                  f'{self.veh_table.values(veh_id)}')
             sys.exit(1)

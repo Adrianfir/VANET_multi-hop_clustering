@@ -25,8 +25,8 @@ if __name__ == "__main__":
         print(cluster.time)
         cluster.update_cluster(cluster.veh_table.ids(), configs, area_zones)
         cluster.stand_alones_cluster(configs, area_zones)
-        if 'veh399' in cluster.veh_table.ids():
-            print(cluster.veh_table.values('veh399'))
+        # if 'veh399' in cluster.veh_table.ids():
+        #     print(cluster.veh_table.values('veh399'))
         # cluster.show_graph(configs)
         # cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/Graph' + str(i))
     end_time = time.time()
