@@ -156,14 +156,17 @@ class DataTable:
             for m in self.bus_table.values(k)['cluster_members']:
                 if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
                     self.veh_table.values(m)['primary_ch'] = None
+                    self.veh_table.values(m)['priority_ch'] = None
+                    self.veh_table.values(m)['priority_counter'] = config.priority_counter
                     self.veh_table.values(m)['counter'] = config.counter
                     self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
                                                                              'timer': None})
                     self.stand_alone.add(m)
                     self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
             for m in self.bus_table.values(k)['sub_cluster_members']:
-                self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
                 self.veh_table.values(m)['primary_ch'] = None
+                self.veh_table.values(m)['priority_ch'] = None
+                self.veh_table.values(m)['priority_counter'] = config.priority_counter
                 self.veh_table.values(m)['secondary_ch'] = None
                 self.veh_table.values(m)['counter'] = config.counter
                 self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
@@ -190,6 +193,8 @@ class DataTable:
                 for m in self.veh_table.values(k)['cluster_members']:
                     if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
                         self.veh_table.values(m)['primary_ch'] = None
+                        self.veh_table.values(m)['priority_ch'] = None
+                        self.veh_table.values(m)['priority_counter'] = config.priority_counter
                         self.veh_table.values(m)['counter'] = config.counter
                         self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
                                                                                  'timer': None})
@@ -213,8 +218,8 @@ class DataTable:
 
             for m in self.veh_table.values(k)['sub_cluster_members']:
                 if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
-                    self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
-                    self.veh_table.values(m)['primary_ch'] = None
+                    self.veh_table.values(m)['priority_ch'] = None
+                    self.veh_table.values(m)['priority_counter'] = config.priority_counter
                     self.veh_table.values(m)['secondary_ch'] = None
                     self.veh_table.values(m)['counter'] = config.counter
                     self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
@@ -235,7 +240,6 @@ class DataTable:
         This method is designed for finding a cluster for veh_id
         :return: cluster heads and connection between them including through the gate_chs
         """
-        global dist_to_primarych
         for veh_id in veh_ids:
             self.veh_table.values(veh_id)['other_chs'] = set()
             self.veh_table.values(veh_id)['gates'] = dict()
@@ -478,6 +482,7 @@ class DataTable:
             self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
 
             self.veh_table.values(veh_id)['counter'] = config.counter
+            self.veh_table.values(veh_id)['priority_ch'] = bus_ch
             self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
             # bus_candidates.remove(bus_ch)
             self.veh_table.values(veh_id)['other_chs']. \
@@ -505,6 +510,7 @@ class DataTable:
 
             self.veh_table.values(veh_id)['primary_ch'] = veh_ch
             self.veh_table.values(veh_id)['counter'] = config.counter
+            self.veh_table.values(veh_id)['priority_ch'] = veh_ch
             self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
 
             self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
@@ -599,6 +605,8 @@ class DataTable:
             veh_ch = self.veh_table.values(sub_ch)['primary_ch']
             self.veh_table.values(veh_id)['primary_ch'] = veh_ch
             self.veh_table.values(veh_id)['secondary_ch'] = sub_ch
+            self.veh_table.values(veh_id)['priority_ch'] = veh_ch
+            self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
             self.veh_table.values(veh_id)['counter'] = config.counter
 
             self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
@@ -709,6 +717,8 @@ class DataTable:
                 self.veh_table.values(ch)['cluster_head'] = True
                 self.veh_table.values(ch)['cluster_members'].add(veh_id)
                 self.veh_table.values(veh_id)['primary_ch'] = ch
+                self.veh_table.values(veh_id)['priority_ch'] = ch
+                self.veh_table.values(veh_id)['priority_counter'] = configs.priority_counter
                 self.veh_table.values(veh_id)['counter'] = configs.counter
                 self.veh_table.values(ch)['counter'] = configs.counter
                 self.veh_table.values(ch)['start_ch_zone'] = self.veh_table.values(ch)['zone']
@@ -913,7 +923,10 @@ class DataTable:
                      (veh_id in self.stand_alone))
                     )
         except AssertionError:
-            print(f'the error happens for {veh_id} at {self.time}')
+            print(f'the error happens for {veh_id} at {self.time} \n'
+                  f'this test is to check if the veh_table is a cluster_head and inside another class at a same time \n' 
+                  f'{self.veh_table.values(veh_id)}')
+
             sys.exit(1)
 
     def stand_alone_test(self, veh_id):
@@ -927,6 +940,8 @@ class DataTable:
                     ((veh_id in self.stand_alone) and
                      (self.veh_table.values(veh_id)['primary_ch'] is None)))
         except AssertionError:
-            print(f'the error happens for {veh_id} at {self.time}')
+            print(f'the error happens for {veh_id} at {self.time} \n '
+                  f'this test is to check if a stand_alone vehicle is not in a cluster or is a cluster_head \n'
+                  f'{self.veh_table.values(veh_id)}')
             print()
             sys.exit(1)
