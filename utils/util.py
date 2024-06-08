@@ -359,7 +359,6 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
         cos_sim = 1 - spatial.distance.cosine([veh_vector_x, veh_vector_y], [ch_vector_x, ch_vector_y])
         theta_sim = np.arccos(cos_sim) / 2 * np.pi
         theta_dist = euclidian_distance / min(table.values(j)['trans_range'], veh_table.values(veh_id)['trans_range'])
-
         # since it might return RuntimeWarning regarding the division, the warning will be ignored
         with np.errstate(divide='ignore', invalid='ignore'):
             speed_sim = np.divide(np.abs(table.values(j)['speed'] - veh_table.values(veh_id)['speed']),
@@ -371,7 +370,6 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
                        np.array([theta_sim, speed_sim, theta_dist]))
         if ('veh' in j) and (table.values(j)['primary_ch'] is not None)\
                 and (table.values(j)['secondary_ch'] is None):
-            print(f'{j}: {table.values(j)["cluster_record"].tail.value["ef"]}')
             ef = np.average([ef, table.values(j)['cluster_record'].tail.value['ef']])
 
         ef *= beta  # the way beta is working is that if both chs, sub_chs, and buses are nearby, the beta
