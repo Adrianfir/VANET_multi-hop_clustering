@@ -196,33 +196,34 @@ class DataTable:
             elif self.veh_table.values(k)['primary_ch'] is not None:
                 if self.veh_table.values(k)['primary_ch'] in veh_ids:
                     k_ch = self.veh_table.values(k)['primary_ch']
-                    for m in self.veh_table.values(k_ch)['sub_cluster_members']:
-                        if ((self.veh_table.values(m)['secondary_ch'] in veh_ids) and
-                                (self.veh_table.values(m)['secondary_ch'] == k)):
-                            self.veh_table.values(m)['secondary_ch'] = None
-                            self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
-                            self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                            self.veh_table.values(m)['primary_ch'] = None
-                            self.veh_table.values(m)['counter'] = config.counter
-                            self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
-                                                                                     'timer': None})
-                            self.stand_alone.add(m)
-                            self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
+                    for m in veh_ids:
+                        if m in self.veh_table.values(k_ch)['sub_cluster_members']:
+                            if self.veh_table.values(m)['secondary_ch'] == k:
+                                    self.veh_table.values(m)['secondary_ch'] = None
+                                    self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
+                                    self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                                    self.veh_table.values(m)['primary_ch'] = None
+                                    self.veh_table.values(m)['counter'] = config.counter
+                                    (self.veh_table.values(m)['cluster_record'].
+                                     append(None, {'start_time': None, 'ef': None, 'timer': None}))
+
+                                    self.stand_alone.add(m)
+                                    self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
                     self.veh_table.values(k_ch)['cluster_members'].remove(k)
                 elif self.veh_table.values(k)['primary_ch'] in bus_ids:
                     k_ch = self.veh_table.values(k)['primary_ch']
                     for m in self.bus_table.values(k_ch)['sub_cluster_members']:
-                        if (self.veh_table.values(m)['secondary_ch'] in veh_ids) and\
-                                (self.veh_table.values(m)['secondary_ch'] == k):
-                            self.veh_table.values(m)['secondary_ch'] = None
-                            self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
-                            self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                            self.veh_table.values(m)['primary_ch'] = None
-                            self.veh_table.values(m)['counter'] = config.counter
-                            self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
-                                                                                     'timer': None})
-                            self.stand_alone.add(m)
-                            self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
+                        if m in veh_ids:
+                            if self.veh_table.values(m)['secondary_ch'] == k:
+                                self.veh_table.values(m)['secondary_ch'] = None
+                                self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
+                                self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                                self.veh_table.values(m)['primary_ch'] = None
+                                self.veh_table.values(m)['counter'] = config.counter
+                                self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
+                                                                                         'timer': None})
+                                self.stand_alone.add(m)
+                                self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
                     self.bus_table.values(k_ch)['cluster_members'].remove(k)
 
             elif k in self.stand_alone:
