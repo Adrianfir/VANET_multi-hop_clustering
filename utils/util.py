@@ -111,7 +111,8 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 mac=mac_address(),
                 counter=config.counter,  # a counter_time to search and join a cluster
                 start_ch_zone=None,  # This is the zone that vehicle starts becoming a ch
-                cluster_record=LinkedList(None, {'start_time': None, 'ef': None, 'timer': None})  # the linked_list
+                cluster_record=LinkedList(None, {'start_time': None, 'ef': None,
+                                                 'timer': None, 'interrupt': list()})  # the linked_list
                 # would record the clusters that this vehicle would join. key is the cluster_head which is None when the
                 # vehicle gets initialized, value['ef'] is the "ef" and value['timer] is the amount of time that this
                 # vehicle would remain in that cluster
