@@ -196,7 +196,7 @@ class DataTable:
             elif self.veh_table.values(k)['primary_ch'] is not None:
                 if self.veh_table.values(k)['primary_ch'] in veh_ids:
                     k_ch = self.veh_table.values(k)['primary_ch']
-                    for m in veh_ids:
+                    for m in self.veh_table.values(k_ch)['cluster_members']:
                         if m in self.veh_table.values(k_ch)['sub_cluster_members']:
                             if self.veh_table.values(m)['secondary_ch'] == k:
                                 self.veh_table.values(m)['secondary_ch'] = None
@@ -212,19 +212,18 @@ class DataTable:
                     self.veh_table.values(k_ch)['cluster_members'].remove(k)
                 elif self.veh_table.values(k)['primary_ch'] in bus_ids:
                     k_ch = self.veh_table.values(k)['primary_ch']
-                    for m in self.bus_table.values(k_ch)['sub_cluster_members']:
-                        if m in veh_ids:
-                            if self.veh_table.values(m)['secondary_ch'] == k:
-                                self.veh_table.values(m)['secondary_ch'] = None
-                                self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
-                                self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                                self.veh_table.values(m)['primary_ch'] = None
-                                self.veh_table.values(m)['counter'] = config.counter
-                                self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
-                                                                                         'timer': None,
-                                                                                         'interrupt': list()})
-                                self.stand_alone.add(m)
-                                self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
+                    for m in self.bus_table.values(k_ch)['cluster_members']:
+                        if self.veh_table.values(m)['secondary_ch'] == k:
+                            self.veh_table.values(m)['secondary_ch'] = None
+                            self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
+                            self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                            self.veh_table.values(m)['primary_ch'] = None
+                            self.veh_table.values(m)['counter'] = config.counter
+                            self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
+                                                                                     'timer': None,
+                                                                                     'interrupt': list()})
+                            self.stand_alone.add(m)
+                            self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
                     self.bus_table.values(k_ch)['cluster_members'].remove(k)
 
             elif k in self.stand_alone:
@@ -365,12 +364,6 @@ class DataTable:
                     dist_to_primarych = util.det_dist(veh_id, self.veh_table, ch_id, temp_table)
                 else:
                     secondary_ch = self.veh_table.values(veh_id)['secondary_ch']
-                    try:
-                        assert secondary_ch in self.veh_table.ids()
-                    except AssertionError:
-                        print(secondary_ch)
-                        sys.exit(1)
-
                     dist_to_secondarych = util.det_dist(veh_id, self.veh_table, secondary_ch, self.veh_table)
 
                 if (((self.veh_table.values(veh_id)['secondary_ch'] is None) and

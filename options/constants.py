@@ -28,8 +28,8 @@ class Inputs:
                     min_long=-79.540771,
                     max_lat=44.012923,
                     max_long=-79.238069)
-        alpha = 0.5
-        trans_range = 200
+        alpha = 1
+        trans_range = 600
         start_time = 1500
         iter = 60
         counter = 15
