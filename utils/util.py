@@ -302,7 +302,7 @@ def choose_ch(table, veh_table_i,
         # since it might return RuntimeWarning regarding the division, the warning will be ignored
         with np.errstate(divide='ignore', invalid='ignore'):
             speed_sim = np.divide(np.abs(table.values(j)['speed'] - veh_table_i['speed']),
-                                  np.abs(table.values(j)['speed']))
+                                  max(np.abs(table.values(j)['speed']), veh_table_i['speed']))
 
         # calculate the Eligibility Factor (EF) for chs
         weights = np.divide(config.weights, sum(config.weights))  # normalizing the weights
@@ -363,7 +363,7 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
         # since it might return RuntimeWarning regarding the division, the warning will be ignored
         with np.errstate(divide='ignore', invalid='ignore'):
             speed_sim = np.divide(np.abs(table.values(j)['speed'] - veh_table.values(veh_id)['speed']),
-                                  np.abs(table.values(j)['speed']))
+                                  max(np.abs(table.values(j)['speed']), veh_table.values(veh_id)['speed']))
 
         # calculate the Eligibility Factor (EF) for chs
         weights = np.divide(config.weights, sum(config.weights))  # normalizing the weights

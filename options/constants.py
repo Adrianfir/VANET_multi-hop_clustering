@@ -33,7 +33,7 @@ class Inputs:
         start_time = 1500
         iter = 60
         counter = 15
-        priority_counter = 1
+        priority_counter = 2
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10
