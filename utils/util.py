@@ -266,15 +266,15 @@ def choose_ch(table, veh_table_i,
     prev_veh_long = (area_zones.zone_hash.values(veh_table_i['prev_zone'])['max_long'] +
                      area_zones.zone_hash.values(veh_table_i['prev_zone'])['min_long']) / 2
 
-    euclidian_distance = hs.haversine((prev_veh_lat, prev_veh_long),
+    euclidean_distance = hs.haversine((prev_veh_lat, prev_veh_long),
                                       (veh_table_i['lat'], veh_table_i['long']),
                                       unit=hs.Unit.METERS)
 
     veh_alpha = np.arctan2((prev_veh_long - veh_table_i['long']),
                           (prev_veh_lat - veh_table_i['lat']))
 
-    veh_vector_x = np.multiply(euclidian_distance, np.cos(veh_alpha))
-    veh_vector_y = np.multiply(euclidian_distance, np.sin(veh_alpha))
+    veh_vector_x = np.multiply(euclidean_distance, np.cos(veh_alpha))
+    veh_vector_y = np.multiply(euclidean_distance, np.sin(veh_alpha))
 
     min_ef = 1000000
     for j in candidates:
@@ -285,19 +285,20 @@ def choose_ch(table, veh_table_i,
         prev_ch_long = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_long'] +
                         area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_long']) / 2
 
-        euclidian_distance = hs.haversine((prev_ch_lat, prev_ch_long),
+        euclidean_distance = hs.haversine((prev_ch_lat, prev_ch_long),
                                           (table.values(j)['lat'], table.values(j)['long']),
                                           unit=hs.Unit.METERS)
 
         ch_alpha = np.arctan2((prev_veh_long - veh_table_i['long']),
                               (prev_veh_lat - veh_table_i['lat']))
 
-        ch_vector_x = np.multiply(euclidian_distance, np.cos(ch_alpha))
-        ch_vector_y = np.multiply(euclidian_distance, np.sin(ch_alpha))
+        ch_vector_x = np.multiply(euclidean_distance, np.cos(ch_alpha))
+        ch_vector_y = np.multiply(euclidean_distance, np.sin(ch_alpha))
 
-        cos_sim = 1 - spatial.distance.cosine([veh_vector_x, veh_vector_y], [ch_vector_x, ch_vector_y])
+        cos_sim = 1 - spatial.distance.cosine([veh_vector_x, veh_vector_y],
+                                              [ch_vector_x, ch_vector_y])
         theta_sim = np.arccos(cos_sim) / 2 * np.pi
-        theta_dist = euclidian_distance / min(table.values(j)['trans_range'], veh_table_i['trans_range'])
+        theta_dist = euclidean_distance / min(table.values(j)['trans_range'], veh_table_i['trans_range'])
 
         # since it might return RuntimeWarning regarding the division, the warning will be ignored
         with np.errstate(divide='ignore', invalid='ignore'):
