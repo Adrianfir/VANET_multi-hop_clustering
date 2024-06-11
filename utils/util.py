@@ -246,23 +246,15 @@ def det_buses_other_ch(bus_id, veh_table, bus_table,
     return all_near_chs
 
 
-def choose_ch(table, veh_table_i,
-              area_zones, candidates, config):
+def choose_ch(table, veh_table_i, area_zones, candidates, config):
     """
-    this function will be used to choose a ch among all other candidates or a ch from other chs nearby as the vehicle's
-    primary_ch. The Factors are [proposed similarity factor, speed similarity, distance]
-    :param table: bus_table or veh_table based on the case that this function will be used
-    :param veh_table_i:
-    :param area_zones:
-    :param candidates:
-    :return: it This function will return the best candidate near to i (vehicle_i) to be
-     its cluster head
+    This function will be used to choose a ch among all other candidates or a ch from other chs nearby as the vehicle's
+    primary_ch. The Factors are [proposed similarity factor, speed similarity, distance].
     """
 
-    # latitude of the centre of previous zone that vehicle were in
+    # Latitude and longitude of the centre of the previous zone that the vehicle was in
     prev_veh_lat = (area_zones.zone_hash.values(veh_table_i['prev_zone'])['max_lat'] +
                     area_zones.zone_hash.values(veh_table_i['prev_zone'])['min_lat']) / 2
-    # longitude of the centre of previous zone that vehicle were in
     prev_veh_long = (area_zones.zone_hash.values(veh_table_i['prev_zone'])['max_long'] +
                      area_zones.zone_hash.values(veh_table_i['prev_zone'])['min_long']) / 2
 
@@ -270,49 +262,48 @@ def choose_ch(table, veh_table_i,
                                       (veh_table_i['lat'], veh_table_i['long']),
                                       unit=hs.Unit.METERS)
 
-    veh_alpha = np.arctan2((prev_veh_long - veh_table_i['long']),
-                          (prev_veh_lat - veh_table_i['lat']))
+    veh_alpha = np.arctan2((veh_table_i['long'] - prev_veh_long), (veh_table_i['lat'] - prev_veh_lat))
 
     veh_vector_x = np.multiply(euclidean_distance, np.cos(veh_alpha))
     veh_vector_y = np.multiply(euclidean_distance, np.sin(veh_alpha))
 
-    min_ef = 1000000
+    min_ef = float('inf')
+    nominee = None
+
     for j in candidates:
-        # latitude of the centre of previous zone that ch were in
+        # Latitude and longitude of the centre of the previous zone that the candidate was in
         prev_ch_lat = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_lat'] +
                        area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_lat']) / 2
-        # latitude of the centre of previous zone that ch were in
         prev_ch_long = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_long'] +
                         area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_long']) / 2
 
-        euclidean_distance = hs.haversine((prev_ch_lat, prev_ch_long),
-                                          (table.values(j)['lat'], table.values(j)['long']),
-                                          unit=hs.Unit.METERS)
+        euclidean_distance_ch = hs.haversine((prev_ch_lat, prev_ch_long),
+                                             (table.values(j)['lat'], table.values(j)['long']),
+                                             unit=hs.Unit.METERS)
 
-        ch_alpha = np.arctan2((prev_veh_long - veh_table_i['long']),
-                              (prev_veh_lat - veh_table_i['lat']))
+        ch_alpha = np.arctan2((table.values(j)['long'] - prev_ch_long), (table.values(j)['lat'] - prev_ch_lat))
 
-        ch_vector_x = np.multiply(euclidean_distance, np.cos(ch_alpha))
-        ch_vector_y = np.multiply(euclidean_distance, np.sin(ch_alpha))
+        ch_vector_x = np.multiply(euclidean_distance_ch, np.cos(ch_alpha))
+        ch_vector_y = np.multiply(euclidean_distance_ch, np.sin(ch_alpha))
 
-        cos_sim = 1 - spatial.distance.cosine([veh_vector_x, veh_vector_y],
-                                              [ch_vector_x, ch_vector_y])
-        theta_sim = np.arccos(cos_sim) / 2 * np.pi
+        # Calculate cosine similarity
+        cos_sim = 1 - spatial.distance.cosine([veh_vector_x, veh_vector_y], [ch_vector_x, ch_vector_y])
+        theta_sim = np.arccos(np.clip(cos_sim, -1.0, 1.0)) / (2 * np.pi)  # Ensure cos_sim is within valid range
+
         theta_dist = euclidean_distance / min(table.values(j)['trans_range'], veh_table_i['trans_range'])
 
-        # since it might return RuntimeWarning regarding the division, the warning will be ignored
         with np.errstate(divide='ignore', invalid='ignore'):
-            speed_sim = np.divide(np.abs(table.values(j)['speed'] - veh_table_i['speed']),
-                                  max(np.abs(table.values(j)['speed']), veh_table_i['speed']))
+            speed_sim = np.divide(np.abs(table.values(j)['speed'] - veh_table_i['speed']) + 0.001,
+                                  max(np.abs(table.values(j)['speed']), veh_table_i['speed']) + 0.001)
 
-        # calculate the Eligibility Factor (EF) for chs
-        weights = np.divide(config.weights, sum(config.weights))  # normalizing the weights
-        ef = np.matmul(np.transpose(weights),
-                       np.array([theta_sim, speed_sim, theta_dist]))
+        # Calculate the Eligibility Factor (EF) for candidates
+        weights = np.divide(config.weights, sum(config.weights))  # Normalize the weights
+        ef = np.matmul(np.transpose(weights), np.array([theta_sim, speed_sim, theta_dist]))
 
         if ef < min_ef:
             min_ef = ef
             nominee = j
+
     return nominee, min_ef
 
 
@@ -359,7 +350,8 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
         ch_vector_y = np.multiply(euclidian_distance, np.sin(ch_alpha))
 
         cos_sim = 1 - spatial.distance.cosine([veh_vector_x, veh_vector_y], [ch_vector_x, ch_vector_y])
-        theta_sim = np.arccos(cos_sim) / 2 * np.pi
+        theta_sim = np.arccos(np.clip(cos_sim, -1.0, 1.0)) / (2 * np.pi)
+
         theta_dist = euclidian_distance / min(table.values(j)['trans_range'], veh_table.values(veh_id)['trans_range'])
         # since it might return RuntimeWarning regarding the division, the warning will be ignored
         with np.errstate(divide='ignore', invalid='ignore'):
