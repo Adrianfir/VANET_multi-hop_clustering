@@ -270,7 +270,7 @@ def choose_ch(table, veh_table_i,
                                       (veh_table_i['lat'], veh_table_i['long']),
                                       unit=hs.Unit.METERS)
 
-    veh_alpha = np.arctan((prev_veh_long - veh_table_i['long']) /
+    veh_alpha = np.arctan2((prev_veh_long - veh_table_i['long']),
                           (prev_veh_lat - veh_table_i['lat']))
 
     veh_vector_x = np.multiply(euclidian_distance, np.cos(veh_alpha))
@@ -289,8 +289,8 @@ def choose_ch(table, veh_table_i,
                                           (table.values(j)['lat'], table.values(j)['long']),
                                           unit=hs.Unit.METERS)
 
-        ch_alpha = np.arctan((prev_veh_long - veh_table_i['long']) /
-                             (prev_veh_lat - veh_table_i['lat']))
+        ch_alpha = np.arctan2((prev_veh_long - veh_table_i['long']),
+                              (prev_veh_lat - veh_table_i['lat']))
 
         ch_vector_x = np.multiply(euclidian_distance, np.cos(ch_alpha))
         ch_vector_y = np.multiply(euclidian_distance, np.sin(ch_alpha))
@@ -330,7 +330,7 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
                                       (veh_table.values(veh_id)['lat'], veh_table.values(veh_id)['long']),
                                       unit=hs.Unit.METERS)
 
-    veh_alpha = np.arctan((prev_veh_long - veh_table.values(veh_id)['long']) /
+    veh_alpha = np.arctan2((prev_veh_long - veh_table.values(veh_id)['long']),
                           (prev_veh_lat - veh_table.values(veh_id)['lat']))
 
     veh_vector_x = np.multiply(euclidian_distance, np.cos(veh_alpha))
@@ -351,7 +351,7 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
                                           (table.values(j)['lat'], table.values(j)['long']),
                                           unit=hs.Unit.METERS)
 
-        ch_alpha = np.arctan((prev_veh_long - veh_table.values(veh_id)['long']) /
+        ch_alpha = np.arctan2((prev_veh_long - veh_table.values(veh_id)['long']),
                              (prev_veh_lat - veh_table.values(veh_id)['lat']))
 
         ch_vector_x = np.multiply(euclidian_distance, np.cos(ch_alpha))
