@@ -29,15 +29,15 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = 1
-        trans_range = 600
-        start_time = 1500
+        trans_range = 200
+        start_time = 1600
         iter = 60
-        counter = 15
+        counter = 4
         priority_counter = 2
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10
-        weights = np.array([0.8, 0.1, 0.1])       # direction's angle, speed, distance
+        weights = np.array([1, 0, 0])       # direction's angle, speed, distance
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,

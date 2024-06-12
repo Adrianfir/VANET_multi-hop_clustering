@@ -13,7 +13,6 @@ import folium
 from folium.plugins import MarkerCluster
 import webbrowser
 import sys
-import pytest
 
 from graph import Graph
 import utils.util as util
@@ -197,34 +196,32 @@ class DataTable:
                 if self.veh_table.values(k)['primary_ch'] in veh_ids:
                     k_ch = self.veh_table.values(k)['primary_ch']
                     for m in self.veh_table.values(k_ch)['cluster_members']:
-                        if m in self.veh_table.values(k_ch)['sub_cluster_members']:
-                            if self.veh_table.values(m)['secondary_ch'] == k:
-                                self.veh_table.values(m)['secondary_ch'] = None
-                                self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
-                                self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                                self.veh_table.values(m)['primary_ch'] = None
-                                self.veh_table.values(m)['counter'] = config.counter
-                                (self.veh_table.values(m)['cluster_record'].
-                                 append(None, {'start_time': None, 'ef': None, 'timer': None, 'interrupt': list()}))
+                        if self.veh_table.values(m)['secondary_ch'] == k:
+                            self.veh_table.values(m)['secondary_ch'] = None
+                            self.veh_table.values(m)['priority_ch'] = k_ch
+                            self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                            self.veh_table.values(m)['primary_ch'] = None
+                            self.veh_table.values(m)['counter'] = config.counter
+                            (self.veh_table.values(m)['cluster_record'].
+                             append(None, {'start_time': None, 'ef': None, 'timer': None, 'interrupt': list()}))
 
-                                self.stand_alone.add(m)
-                                self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
+                            self.stand_alone.add(m)
+                            self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
                     self.veh_table.values(k_ch)['cluster_members'].remove(k)
                 elif self.veh_table.values(k)['primary_ch'] in bus_ids:
                     k_ch = self.veh_table.values(k)['primary_ch']
                     for m in self.bus_table.values(k_ch)['cluster_members']:
-                        if m in self.bus_table.values(k_ch)['sub_cluster_members']:
-                            if self.veh_table.values(m)['secondary_ch'] == k:
-                                self.veh_table.values(m)['secondary_ch'] = None
-                                self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
-                                self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                                self.veh_table.values(m)['primary_ch'] = None
-                                self.veh_table.values(m)['counter'] = config.counter
-                                self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
-                                                                                         'timer': None,
-                                                                                         'interrupt': list()})
-                                self.stand_alone.add(m)
-                                self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
+                        if self.veh_table.values(m)['secondary_ch'] == k:
+                            self.veh_table.values(m)['secondary_ch'] = None
+                            self.veh_table.values(m)['priority_ch'] = self.veh_table.values(m)['primary_ch']
+                            self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                            self.veh_table.values(m)['primary_ch'] = None
+                            self.veh_table.values(m)['counter'] = config.counter
+                            self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
+                                                                                     'timer': None,
+                                                                                     'interrupt': list()})
+                            self.stand_alone.add(m)
+                            self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
                     self.bus_table.values(k_ch)['cluster_members'].remove(k)
 
             elif k in self.stand_alone:
@@ -289,29 +286,48 @@ class DataTable:
             elif (self.veh_table.values(veh_id)['in_area'] is True) and \
                     (self.veh_table.values(veh_id)['primary_ch'] is None) and \
                     (self.veh_table.values(veh_id)['cluster_head'] is True):
-
                 temp_mem = self.veh_table.values(veh_id)['cluster_members'].copy()
-
                 for m in temp_mem:
                     if self.veh_table.values(m)['secondary_ch'] is None:
                         dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
 
                         if dist > min(self.veh_table.values(veh_id)['trans_range'],
                                       self.veh_table.values(m)['trans_range']):
+                            temp_sum_mem = self.veh_table.values(veh_id)['sub_cluster_members'].copy()
+                            for sub_mem in temp_sum_mem:
+                                if self.veh_table.values(sub_mem)['secondary_ch'] == m:
+                                    self.veh_table.values(sub_mem)['primary_ch'] = None
+                                    self.veh_table.values(sub_mem)['secondary_ch'] = None
+                                    self.veh_table.values(sub_mem)['cluster_record'].append(None,
+                                                                                            {'start_time': None,
+                                                                                             'ef': None,
+                                                                                             'timer': None,
+                                                                                             'interrupt': list()})
+                                    self.veh_table.values(sub_mem)['priority_ch'] = veh_id
+                                    self.veh_table.values(sub_mem)['priority_counter'] = config.priority_counter
+                                    self.stand_alone.add(sub_mem)
+                                    self.zone_stand_alone[self.veh_table.values(m)['zone']].add(sub_mem)
+                                    self.net_graph.remove_edge(sub_mem, m)
+                                    self.veh_table.values(veh_id)['cluster_members'].remove(sub_mem)
+                                    self.veh_table.values(veh_id)['sub_cluster_members'].remove(sub_mem)
                             self.veh_table.values(veh_id)['cluster_members'].remove(m)
                             self.veh_table.values(m)['primary_ch'] = None
                             self.veh_table.values(m)['secondary_ch'] = None
                             self.veh_table.values(m)['cluster_record'].append(None, {'start_time': None, 'ef': None,
                                                                                      'timer': None,
                                                                                      'interrupt': list()})
+                            self.veh_table.values(m)['counter'] = config.counter
                             self.veh_table.values(m)['priority_ch'] = veh_id
                             self.veh_table.values(m)['priority_counter'] = config.priority_counter
                             self.stand_alone.add(m)
                             self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
                             self.net_graph.remove_edge(veh_id, m)
+                            # now the updates related to sub_cluster_members should be applied
+
                     else:
                         sec_ch = self.veh_table.values(m)['secondary_ch']
                         dist = util.det_dist(sec_ch, self.veh_table, m, self.veh_table)
+
                         if dist > min(self.veh_table.values(veh_id)['trans_range'],
                                       self.veh_table.values(sec_ch)['trans_range']):
                             self.veh_table.values(veh_id)['cluster_members'].remove(m)
@@ -355,16 +371,17 @@ class DataTable:
             elif (self.veh_table.values(veh_id)['in_area'] is True) and \
                     (self.veh_table.values(veh_id)['cluster_head'] is False) and \
                     (self.veh_table.values(veh_id)['primary_ch'] is not None):
-                if 'bus' in self.veh_table.values(veh_id)['primary_ch']:
+                ch_id = self.veh_table.values(veh_id)['primary_ch']
+                if 'bus' in ch_id:
                     temp_table = self.bus_table
                 else:
                     temp_table = self.veh_table
-                ch_id = self.veh_table.values(veh_id)['primary_ch']
                 if self.veh_table.values(veh_id)['secondary_ch'] is None:
                     secondary_ch = None
                     dist_to_primarych = util.det_dist(veh_id, self.veh_table, ch_id, temp_table)
                 else:
                     secondary_ch = self.veh_table.values(veh_id)['secondary_ch']
+
                     dist_to_secondarych = util.det_dist(veh_id, self.veh_table, secondary_ch, self.veh_table)
 
                 if (((self.veh_table.values(veh_id)['secondary_ch'] is None) and
@@ -420,6 +437,25 @@ class DataTable:
                         self.veh_table.values(ch_id)['cluster_members'].remove(veh_id)
                         if secondary_ch is not None:
                             self.veh_table.values(ch_id)['sub_cluster_members'].remove(veh_id)
+                    temp_sub_mem = temp_table.values(ch_id)['sub_cluster_members'].copy()
+                    for sub_mem in temp_sub_mem:
+                        if self.veh_table.values(sub_mem)['secondary_ch'] == veh_id:
+                            self.veh_table.values(sub_mem)['primary_ch'] = None
+                            self.veh_table.values(sub_mem)['secondary_ch'] = None
+                            self.veh_table.values(sub_mem)['cluster_record'].append(None,
+                                                                                    {'start_time': None, 'ef': None,
+                                                                                     'timer': None,
+                                                                                     'interrupt': list()})
+                            self.veh_table.values(sub_mem)['priority_ch'] = ch_id
+                            self.veh_table.values(sub_mem)['priority_counter'] = config.priority_counter
+                            self.stand_alone.add(sub_mem)
+                            self.zone_stand_alone[self.veh_table.values(sub_mem)['zone']].add(sub_mem)
+                            self.net_graph.remove_edge(sub_mem, veh_id)
+                            self.veh_table.values(ch_id)['cluster_members'].remove(sub_mem) if 'veh' in ch_id else (
+                                self.bus_table.values(ch_id)['cluster_members'].remove(sub_mem))
+                            self.veh_table.values(ch_id)['sub_cluster_members'].remove(sub_mem) if 'veh' in ch_id else (
+                                self.bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem))
+
                     self.veh_table.values(veh_id)['priority_ch'] = ch_id
                     self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
                     self.net_graph.remove_edge(ch_id, veh_id)
@@ -430,6 +466,7 @@ class DataTable:
                     self.stand_alone.add(veh_id)
                     self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].add(veh_id)
                     self.update_cluster([veh_id, ], config, zones)
+                    # now the updates related to sub_cluster_members should be applied
 
             # checking if the vehicle is in the understudied-area and if it's not in any cluster and if it's not a ch
             elif (self.veh_table.values(veh_id)['in_area'] is True) and \
@@ -481,79 +518,26 @@ class DataTable:
             bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
                                         bus_candidates, config)  # determine the best from bus_candidates
 
-            if bus_ch == self.veh_table.values(veh_id)['priority_ch']:
-                self.veh_table.values(veh_id)['cluster_record'].pop()
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
-                        config.priority_counter - self.veh_table.values(veh_id)['priority_counter'])
-
-            else:
-                self.veh_table.values(veh_id)['cluster_record'].tail.key = bus_ch
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
-
-            self.veh_table.values(veh_id)['primary_ch'] = bus_ch
-            self.veh_table.values(veh_id)['counter'] = config.counter
-            self.veh_table.values(veh_id)['priority_ch'] = bus_ch
-            self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
-            # bus_candidates.remove(bus_ch)
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-            if bus_ch in self.veh_table.values(veh_id)['other_chs']:
-                self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
-            self.bus_table.values(bus_ch)['cluster_members'].add(veh_id)
-            self.bus_table.values(bus_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-            self.bus_table.values(bus_ch)['gate_chs']. \
-                update(self.bus_table.values(bus_ch)['gate_chs'].
-                       union(self.veh_table.values(veh_id)['other_chs']))
-            self.stand_alone.remove(veh_id)
-            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
-            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-            self.net_graph.add_edge(bus_ch, veh_id)
-            for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                self.net_graph.add_edge(other_ch, veh_id)
+            (self.bus_table, self.veh_table,
+             self.stand_alone,self.zone_stand_alone,
+             self.net_graph) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
+                                               config, ef, self.time, bus_candidates,
+                                               ch_candidates, self.stand_alone,
+                                               self.zone_stand_alone, self.net_graph,
+                                               other_vehs)
 
         elif (len(bus_candidates) == 0) and (len(ch_candidates) > 0):
 
             veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
                                         zones, ch_candidates, config)  # determine the best from vehicles
 
-            if veh_ch == self.veh_table.values(veh_id)['priority_ch']:
-                self.veh_table.values(veh_id)['cluster_record'].pop()
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
-                        config.priority_counter - self.veh_table.values(veh_id)['priority_counter'])
-
-            else:
-                self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
-
-            self.veh_table.values(veh_id)['primary_ch'] = veh_ch
-            self.veh_table.values(veh_id)['counter'] = config.counter
-            self.veh_table.values(veh_id)['priority_ch'] = veh_ch
-            self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
-
-            ch_candidates.remove(veh_ch)
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-            self.veh_table.values(veh_ch)['cluster_members'].add(veh_id)
-            self.veh_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-            self.veh_table.values(veh_ch)['gate_chs']. \
-                update(self.veh_table.values(veh_ch)['gate_chs'].
-                       union(self.veh_table.values(veh_id)['other_chs']))
-            self.stand_alone.remove(veh_id)
-            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
-            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-            self.net_graph.add_edge(veh_ch, veh_id)
-            for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                self.net_graph.add_edge(other_ch, veh_id)
+            (self.veh_table, self.veh_table,
+             self.stand_alone, self.zone_stand_alone,
+             self.net_graph) = util.add_member(veh_ch, self.veh_table, veh_id, self.veh_table,
+                                               config, ef, self.time, bus_candidates,
+                                               ch_candidates, self.stand_alone,
+                                               self.zone_stand_alone, self.net_graph,
+                                               other_vehs)
 
         self.check_general_framework(veh_id)
 
@@ -570,136 +554,47 @@ class DataTable:
 
         if 'bus' in ch:
             bus_ch = ch
-            self.veh_table.values(veh_id)['primary_ch'] = bus_ch
 
-            if bus_ch == self.veh_table.values(veh_id)['priority_ch']:
-                self.veh_table.values(veh_id)['cluster_record'].pop()
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
-                    config.priority_counter - self.veh_table.values(veh_id)['priority_counter'])
-
-            else:
-                self.veh_table.values(veh_id)['cluster_record'].tail.key = bus_ch
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
-
-            self.veh_table.values(veh_id)['counter'] = config.counter
-            self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
-            bus_candidates.remove(bus_ch)
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-            if bus_ch in self.veh_table.values(veh_id)['other_chs']:
-                self.veh_table.values(veh_id)['other_chs'].remove(bus_ch)
-            self.bus_table.values(bus_ch)['cluster_members'].add(veh_id)
-            self.bus_table.values(bus_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-            self.bus_table.values(bus_ch)['gate_chs']. \
-                update(self.bus_table.values(bus_ch)['gate_chs'].
-                       union(self.veh_table.values(veh_id)['other_chs']))
-            self.stand_alone.remove(veh_id)
-            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
-            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-            self.net_graph.add_edge(bus_ch, veh_id)
-            for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                self.net_graph.add_edge(other_ch, veh_id)
+            (self.bus_table, self.veh_table,
+             self.stand_alone, self.zone_stand_alone,
+             self.net_graph) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
+                                               config, ef, self.time, bus_candidates,
+                                               ch_candidates, self.stand_alone,
+                                               self.zone_stand_alone, self.net_graph,
+                                               other_vehs)
 
         elif ('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True):
             veh_ch = ch
 
-            if veh_ch == self.veh_table.values(veh_id)['priority_ch']:
-                self.veh_table.values(veh_id)['cluster_record'].pop()
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
-                        config.priority_counter - self.veh_table.values(veh_id)['priority_counter'])
-
-            else:
-                self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
-
-            self.veh_table.values(veh_id)['primary_ch'] = veh_ch
-            self.veh_table.values(veh_id)['counter'] = config.counter
-            self.veh_table.values(veh_id)['priority_ch'] = veh_ch
-            self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
-
-            ch_candidates.remove(veh_ch)
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-            self.veh_table.values(veh_ch)['cluster_members'].add(veh_id)
-            self.veh_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-            self.veh_table.values(veh_ch)['gate_chs']. \
-                update(self.veh_table.values(veh_ch)['gate_chs'].
-                       union(self.veh_table.values(veh_id)['other_chs']))
-            self.stand_alone.remove(veh_id)
-            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
-            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-            self.net_graph.add_edge(veh_ch, veh_id)
-            for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                self.net_graph.add_edge(other_ch, veh_id)
+            (self.veh_table, self.veh_table,
+             self.stand_alone, self.zone_stand_alone,
+             self.net_graph) = util.add_member(veh_ch, self.veh_table, veh_id, self.veh_table,
+                                               config, ef, self.time, bus_candidates,
+                                               ch_candidates, self.stand_alone,
+                                               self.zone_stand_alone, self.net_graph,
+                                               other_vehs)
         elif ('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is False):
             sub_ch = ch
             veh_ch = self.veh_table.values(sub_ch)['primary_ch']
 
-            if veh_ch == self.veh_table.values(veh_id)['priority_ch']:
-                self.veh_table.values(veh_id)['cluster_record'].pop()
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
-                        config.priority_counter - self.veh_table.values(veh_id)['priority_counter'])
+            if 'bus' in veh_ch:
 
+                (self.veh_table, self.veh_table,
+                 self.stand_alone, self.zone_stand_alone,
+                 self.net_graph) = util.add_sub_member(veh_ch, self.bus_table, veh_id, sub_ch, self.veh_table,
+                                                       config, ef, self.time, bus_candidates,
+                                                       ch_candidates, self.stand_alone,
+                                                       self.zone_stand_alone, self.net_graph,
+                                                       other_vehs)
             else:
-                self.veh_table.values(veh_id)['cluster_record'].tail.key = veh_ch
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = self.time
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
-                self.veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
+                (self.veh_table, self.veh_table,
+                 self.stand_alone, self.zone_stand_alone,
+                 self.net_graph) = util.add_sub_member(veh_ch, self.bus_table, veh_id, sub_ch, self.veh_table,
+                                                       config, ef, self.time, bus_candidates,
+                                                       ch_candidates, self.stand_alone,
+                                                       self.zone_stand_alone, self.net_graph,
+                                                       other_vehs)
 
-            self.veh_table.values(veh_id)['primary_ch'] = veh_ch
-            self.veh_table.values(veh_id)['secondary_ch'] = sub_ch
-            self.veh_table.values(veh_id)['priority_ch'] = veh_ch
-            self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
-            self.veh_table.values(veh_id)['counter'] = config.counter
-
-            if 'bus' not in veh_ch:
-                if veh_ch in ch_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
-                    # the veh_ch might not be in the ch_candidates
-                    ch_candidates.remove(veh_ch)
-                # if a vehicle is added as sub_member, it would be in both sub_cluster_members
-                # and cluster_members of the CH
-                self.veh_table.values(veh_ch)['cluster_members'].add(veh_id)
-                self.veh_table.values(veh_ch)['sub_cluster_members'].add(veh_id)
-                self.veh_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-                self.veh_table.values(veh_ch)['gate_chs']. \
-                    update(self.veh_table.values(veh_ch)['gate_chs'].
-                           union(self.veh_table.values(veh_id)['other_chs']))
-            else:
-                if veh_ch in bus_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
-                    # the veh_ch might not be in the bus_candidates
-                    bus_candidates.remove(veh_ch)
-                # if a vehicle is added as sub_member, it would be in both sub_cluster_members
-                # and cluster_members of the CH
-                self.bus_table.values(veh_ch)['cluster_members'].add(veh_id)
-                self.bus_table.values(veh_ch)['sub_cluster_members'].add(veh_id)
-                self.bus_table.values(veh_ch)['gates'][veh_id] = self.veh_table.values(veh_id)['other_chs']
-                self.bus_table.values(veh_ch)['gate_chs']. \
-                    update(self.bus_table.values(veh_ch)['gate_chs'].
-                           union(self.veh_table.values(veh_id)['other_chs']))
-
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-            self.veh_table.values(veh_id)['other_chs']. \
-                update(self.veh_table.values(veh_id)['other_chs'].union(bus_candidates))
-            self.veh_table.values(sub_ch)['sub_cluster_members'].add(veh_id)
-            self.stand_alone.remove(veh_id)
-            self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].remove(veh_id)
-            self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-            self.net_graph.add_edge(veh_ch, veh_id)
-            for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                self.net_graph.add_edge(other_ch, veh_id)
 
         self.check_general_framework(veh_id)
 

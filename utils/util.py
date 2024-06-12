@@ -3,10 +3,10 @@ This is the utils file including the small functions
 """
 __author__: str = "Pouya 'Adrian' Firouzmakan"
 __all__ = [
-    'choose_ch', 'choose_multihop_ch', 'det_befit', 'det_beta', 'det_border_speed_count', 'det_buses_other_ch',
-    'det_con_factor', 'det_dist', 'det_linkage_fac', 'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca',
-    'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address', 'make_slideshow', 'middle_zone', 'presence',
-    'priority_clusters', 'save_img', 'sumo_net_info', 'update_bus_table', 'update_degree_n', 'update_sa_net_graph',
+    'add_member', 'add_sub_member', 'choose_ch', 'choose_multihop_ch', 'det_befit', 'det_beta',
+    'det_border_speed_count', 'det_buses_other_ch', 'det_con_factor', 'det_dist', 'det_linkage_fac',
+    'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca', 'image_num', 'initiate_new_bus',
+    'initiate_new_veh', 'mac_address', 'make_slideshow', 'middle_zone', 'presence', 'priority_clusters',
     'update_sai', 'update_veh_table'
 ]
 
@@ -117,6 +117,185 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 # vehicle gets initialized, value['ef'] is the "ef" and value['timer] is the amount of time that this
                 # vehicle would remain in that cluster
                 )
+
+
+def add_member(ch_id, ch_table,
+               veh_id, veh_table, config,
+               ef, sec, bus_candidates,
+               ch_candidates, stand_alone,
+               zone_stand_alone, net_graph,
+               other_vehs):
+    """
+    this function is used for adding a vehicle to a cluster as a 'member' not 'sum_member'
+    :param ch_id:
+    :param ch_table:
+    :param veh_id:
+    :param veh_table:
+    :param config:
+    :param ef:
+    :param sec: self.time in the data_cluster.py
+    :param bus_candidates:
+    :param ch_candidates:
+    :param stand_alone:
+    :param zone_stand_alone:
+    :param net_graph:
+    :param other_vehs:
+    :return:
+    """
+    veh_table.values(veh_id)['primary_ch'] = ch_id
+
+    if ch_id == veh_table.values(veh_id)['priority_ch']:
+        veh_table.values(veh_id)['cluster_record'].pop()
+        veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
+        veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
+            config.priority_counter - veh_table.values(veh_id)['priority_counter'])
+
+    else:
+        veh_table.values(veh_id)['cluster_record'].tail.key = ch_id
+        veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = sec
+        veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
+        veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
+        veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
+
+    veh_table.values(veh_id)['counter'] = config.counter
+    veh_table.values(veh_id)['priority_ch'] = ch_id
+    veh_table.values(veh_id)['priority_counter'] = config.priority_counter
+    # bus_candidates.remove(bus_ch)
+    veh_table.values(veh_id)['other_chs']. \
+        update(veh_table.values(veh_id)['other_chs'].union(bus_candidates))
+    veh_table.values(veh_id)['other_chs']. \
+        update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
+    if ch_id in veh_table.values(veh_id)['other_chs']:
+        veh_table.values(veh_id)['other_chs'].remove(ch_id)
+    ch_table.values(ch_id)['cluster_members'].add(veh_id)
+    ch_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+    ch_table.values(ch_id)['gate_chs']. \
+        update(ch_table.values(ch_id)['gate_chs'].
+               union(veh_table.values(veh_id)['other_chs']))
+    stand_alone.remove(veh_id)
+    zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+    veh_table.values(veh_id)['other_vehs'] = other_vehs
+    net_graph.add_edge(ch_id, veh_id)
+    for other_ch in veh_table.values(veh_id)['other_chs']:
+        net_graph.add_edge(other_ch, veh_id)
+    return (ch_table, veh_table,
+            stand_alone, zone_stand_alone,
+            net_graph)
+
+
+def add_sub_member(ch_id, ch_table,
+                   veh_id, sub_ch_id, veh_table, config,
+                   ef, sec, bus_candidates,
+                   ch_candidates, stand_alone,
+                   zone_stand_alone, net_graph,
+                   other_vehs):
+
+    """
+
+    :param ch_id:
+    :param ch_table:
+    :param veh_id:
+    :param sub_ch_id:
+    :param veh_table:
+    :param config:
+    :param ef:
+    :param sec:
+    :param bus_candidates:
+    :param ch_candidates:
+    :param stand_alone:
+    :param zone_stand_alone:
+    :param net_graph:
+    :param other_vehs:
+    :return:
+    """
+    veh_table.values(veh_id)['primary_ch'] = ch_id
+
+    if ch_id == veh_table.values(veh_id)['priority_ch']:
+        veh_table.values(veh_id)['cluster_record'].pop()
+        veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
+        veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
+            config.priority_counter - veh_table.values(veh_id)['priority_counter'])
+
+    else:
+        veh_table.values(veh_id)['cluster_record'].tail.key = ch_id
+        veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = sec
+        veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
+        veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
+        veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
+
+    veh_table.values(veh_id)['secondary_ch'] = sub_ch_id
+    veh_table.values(veh_id)['priority_ch'] = ch_id
+    veh_table.values(veh_id)['priority_counter'] = config.priority_counter
+    veh_table.values(veh_id)['counter'] = config.counter
+
+    if 'bus' not in ch_id:
+        if ch_id in ch_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
+            # the veh_ch might not be in the ch_candidates
+            ch_candidates.remove(ch_id)
+        # if a vehicle is added as sub_member, it would be in both sub_cluster_members
+        # and cluster_members of the CH
+        veh_table.values(ch_id)['cluster_members'].add(veh_id)
+        veh_table.values(ch_id)['sub_cluster_members'].add(veh_id)
+        veh_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+        veh_table.values(ch_id)['gate_chs']. \
+            update(veh_table.values(ch_id)['gate_chs'].
+                   union(veh_table.values(veh_id)['other_chs']))
+    else:
+        if ch_id in bus_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
+            # the veh_ch might not be in the bus_candidates
+            bus_candidates.remove(ch_id)
+        # if a vehicle is added as sub_member, it would be in both sub_cluster_members
+        # and cluster_members of the CH
+        ch_table.values(ch_id)['cluster_members'].add(veh_id)
+        ch_table.values(ch_id)['sub_cluster_members'].add(veh_id)
+        ch_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+        ch_table.values(ch_id)['gate_chs']. \
+            update(ch_table.values(ch_id)['gate_chs'].
+                   union(veh_table.values(veh_id)['other_chs']))
+
+    veh_table.values(veh_id)['other_chs']. \
+        update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
+    veh_table.values(veh_id)['other_chs']. \
+        update(veh_table.values(veh_id)['other_chs'].union(bus_candidates))
+    veh_table.values(sub_ch_id)['sub_cluster_members'].add(veh_id)
+    stand_alone.remove(veh_id)
+    zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+    veh_table.values(veh_id)['other_vehs'] = other_vehs
+    net_graph.add_edge(sub_ch_id, veh_id)
+    for other_ch in veh_table.values(veh_id)['other_chs']:
+        net_graph.add_edge(other_ch, veh_id)
+
+    return (ch_table, veh_table,
+            stand_alone, zone_stand_alone,
+            net_graph)
+
+
+def remove_member(ch_id, ch_table,
+               veh_id, veh_table, con):
+    """
+
+        :param ch_id:
+        :param ch_table:
+        :param veh_id:
+        :param veh_table:
+        :return:
+        """
+    pass
+
+
+
+
+def remove_sub_member(ch_id, ch_table,
+               veh_id, veh_table):
+    """
+
+    :param ch_id:
+    :param ch_table:
+    :param veh_id:
+    :param veh_table:
+    :return:
+    """
+    pass
 
 
 def mac_address():
