@@ -270,32 +270,121 @@ def add_sub_member(ch_id, ch_table,
             net_graph)
 
 
-def remove_member(ch_id, ch_table,
-               veh_id, veh_table, con):
+def remove_member(mem, ch_id, veh_table, ch_table, config,
+                  net_graph, stand_alone, zone_stand_alone):
     """
-
-        :param ch_id:
-        :param ch_table:
-        :param veh_id:
-        :param veh_table:
-        :return:
-        """
-    pass
-
-
-
-
-def remove_sub_member(ch_id, ch_table,
-               veh_id, veh_table):
-    """
-
+    This function would remove a cluster member from the cluster
+    :type
+    :param mem:
     :param ch_id:
-    :param ch_table:
-    :param veh_id:
     :param veh_table:
+    :param ch_table:
+    :param config:
+    :param net_graph:
+    :param stand_alone:
+    :param zone_stand_alone:
     :return:
     """
-    pass
+    ch_table.values(ch_id)['cluster_members'].remove(mem)
+    veh_table.values(mem)['primary_ch'] = None
+    veh_table.values(mem)['secondary_ch'] = None
+    veh_table.values(mem)['cluster_record'].append(None, {'start_time': None, 'ef': None,
+                                                          'timer': None,
+                                                          'interrupt': list()})
+    veh_table.values(mem)['counter'] = config.counter
+    veh_table.values(mem)['priority_ch'] = ch_id
+    veh_table.values(mem)['priority_counter'] = config.priority_counter
+    stand_alone.add(mem)
+    zone_stand_alone[veh_table.values(mem)['zone']].add(mem)
+    net_graph.remove_edge(ch_id, mem)
+
+    return (veh_table, ch_table, net_graph,
+            stand_alone, zone_stand_alone)
+
+
+def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, ch_table, config,
+                      net_graph, stand_alone, zone_stand_alone):
+    """
+    This function would remove a sub_cluster member from the cluster
+    :type
+    :param sub_mem_id:
+    :param sub_ch_id:
+    :param ch_id:
+    :param veh_table:
+    :param ch_table:
+    :param config:
+    :param net_graph:
+    :param stand_alone:
+    :param zone_stand_alone:
+    :return:
+    """
+    veh_table.values(sub_mem_id)['primary_ch'] = None
+    veh_table.values(sub_mem_id)['secondary_ch'] = None
+    veh_table.values(sub_mem_id)['cluster_record'].append(None,
+                                                          {'start_time': None,
+                                                           'ef': None,
+                                                           'timer': None,
+                                                           'interrupt': list()})
+    veh_table.values(sub_mem_id)['priority_ch'] = ch_id
+    veh_table.values(sub_mem_id)['priority_counter'] = config.priority_counter
+    stand_alone.add(sub_mem_id)
+    zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
+    net_graph.remove_edge(sub_mem_id, sub_ch_id)
+    ch_table.values(ch_id)['cluster_members'].remove(sub_mem_id)
+    ch_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
+
+    return (veh_table, ch_table, net_graph,
+            stand_alone, zone_stand_alone)
+
+
+def set_ch(veh_id, veh_table, all_chs, stand_alone,
+           zone_stand_alone, zone_ch, config):
+    """
+    This function would update the information of a vehicle turning into a CH
+    :param veh_id:
+    :param veh_table:
+    :param all_chs:
+    :param stand_alone:
+    :param zone_stand_alone:
+    :param zone_ch:
+    :param config:
+    :return:
+    """
+    veh_table.values(veh_id)['cluster_head'] = True
+    veh_table.values(veh_id)['start_ch_zone'] = veh_table.values(veh_id)['zone']
+    all_chs.add(veh_id)
+    zone_ch[veh_table.values(veh_id)['zone']].add(veh_id)
+    veh_table.values(veh_id)['counter'] = config.counter
+    veh_table.values(veh_id)['priority_counter'] = config.priority_counter
+    veh_table.values(veh_id)['priority_ch'] = None
+    stand_alone.remove(veh_id)
+    zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+
+    return (veh_table, all_chs, stand_alone,
+            zone_stand_alone, zone_ch)
+
+
+def set_ch_to_veh(veh_id, veh_table, zone_ch,
+                  all_chs, stand_alone, zone_stand_alone):
+    """
+    This function would set a CH to a stand_alone vehicle
+    :param veh_id:
+    :param veh_table:
+    :param zone_ch:
+    :param all_chs:
+    :param stand_alone:
+    :param zone_stand_alone:
+    :return:
+    """
+    veh_table.values(veh_id)['cluster_members'] = set()
+    veh_table.values(veh_id)['cluster_head'] = False
+    veh_table.values(veh_id)['start_ch_zone'] = None
+    zone_ch[veh_table.values(veh_id)['zone']].remove(veh_id)
+    all_chs.remove(veh_id)
+    stand_alone.add(veh_id)
+    zone_stand_alone[veh_table.values(veh_id)['zone']].add(veh_id)
+    return (veh_table, zone_ch, all_chs,
+            stand_alone, zone_stand_alone)
 
 
 def mac_address():
