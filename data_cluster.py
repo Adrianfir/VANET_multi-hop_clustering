@@ -318,7 +318,7 @@ class DataTable:
                                     util.remove_member(m, veh_id, self.veh_table, self.bus_table, config,
                                                        self.net_graph, self.stand_alone, self.zone_stand_alone))
 
-                    elif ((m in self.veh_table.values(veh_id)['cluster_members']()) and
+                    elif ((m in self.veh_table.values(veh_id)['cluster_members']) and
                           (self.veh_table.values(m)['secondary_ch'] is not None)):
                         sec_ch = self.veh_table.values(m)['secondary_ch']
                         dist = util.det_dist(sec_ch, self.veh_table, m, self.veh_table)

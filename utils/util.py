@@ -237,6 +237,7 @@ def add_sub_member(ch_id, bus_table,
     veh_table.values(veh_id)['priority_ch'] = ch_id
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
     veh_table.values(veh_id)['counter'] = config.counter
+    veh_table.values(sub_ch_id)['sub_members'].add(veh_id)
 
     if 'bus' not in ch_id:
         if ch_id in ch_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
@@ -295,7 +296,7 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     :param zone_stand_alone:
     :return:
     """
-    temp_sub_mem = veh_table.values(mem)['sub_members']
+    temp_sub_mem = veh_table.values(mem)['sub_members'].copy()
     for s_m in temp_sub_mem:
         (veh_table, bus_table, net_graph,
          stand_alone, zone_stand_alone) = remove_sub_member(s_m, mem, ch_id, veh_table, bus_table, config,
