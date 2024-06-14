@@ -104,6 +104,7 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),  # This will be a Graph if the vehicle is a ch
                 sub_cluster_members=set(),
+                sub_members=set(),  # cluster members connected to claster through this vehicle would be in this set
                 gates=dict(),
                 gate_chs=set(),
                 other_vehs=set(),
@@ -119,7 +120,7 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 )
 
 
-def add_member(ch_id, ch_table,
+def add_member(ch_id, bus_table,
                veh_id, veh_table, config,
                ef, sec, bus_candidates,
                ch_candidates, stand_alone,
@@ -128,7 +129,7 @@ def add_member(ch_id, ch_table,
     """
     this function is used for adding a vehicle to a cluster as a 'member' not 'sum_member'
     :param ch_id:
-    :param ch_table:
+    :param bus_table:
     :param veh_id:
     :param veh_table:
     :param config:
@@ -157,6 +158,7 @@ def add_member(ch_id, ch_table,
         veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
         veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
 
+    veh_table.values(veh_id)['sub_members'] = set()
     veh_table.values(veh_id)['counter'] = config.counter
     veh_table.values(veh_id)['priority_ch'] = ch_id
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
@@ -167,23 +169,30 @@ def add_member(ch_id, ch_table,
         update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
     if ch_id in veh_table.values(veh_id)['other_chs']:
         veh_table.values(veh_id)['other_chs'].remove(ch_id)
-    ch_table.values(ch_id)['cluster_members'].add(veh_id)
-    ch_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
-    ch_table.values(ch_id)['gate_chs']. \
-        update(ch_table.values(ch_id)['gate_chs'].
-               union(veh_table.values(veh_id)['other_chs']))
+    if 'bus' in ch_id:
+        bus_table.values(ch_id)['cluster_members'].add(veh_id)
+        bus_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+        bus_table.values(ch_id)['gate_chs']. \
+            update(bus_table.values(ch_id)['gate_chs'].
+                   union(veh_table.values(veh_id)['other_chs']))
+    else:
+        veh_table.values(ch_id)['cluster_members'].add(veh_id)
+        veh_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+        veh_table.values(ch_id)['gate_chs']. \
+            update(veh_table.values(ch_id)['gate_chs'].
+                   union(veh_table.values(veh_id)['other_chs']))
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
     veh_table.values(veh_id)['other_vehs'] = other_vehs
     net_graph.add_edge(ch_id, veh_id)
     for other_ch in veh_table.values(veh_id)['other_chs']:
         net_graph.add_edge(other_ch, veh_id)
-    return (ch_table, veh_table,
+    return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
             net_graph)
 
 
-def add_sub_member(ch_id, ch_table,
+def add_sub_member(ch_id, bus_table,
                    veh_id, sub_ch_id, veh_table, config,
                    ef, sec, bus_candidates,
                    ch_candidates, stand_alone,
@@ -193,7 +202,7 @@ def add_sub_member(ch_id, ch_table,
     """
 
     :param ch_id:
-    :param ch_table:
+    :param bus_table:
     :param veh_id:
     :param sub_ch_id:
     :param veh_table:
@@ -208,6 +217,7 @@ def add_sub_member(ch_id, ch_table,
     :param other_vehs:
     :return:
     """
+
     veh_table.values(veh_id)['primary_ch'] = ch_id
 
     if ch_id == veh_table.values(veh_id)['priority_ch']:
@@ -246,11 +256,11 @@ def add_sub_member(ch_id, ch_table,
             bus_candidates.remove(ch_id)
         # if a vehicle is added as sub_member, it would be in both sub_cluster_members
         # and cluster_members of the CH
-        ch_table.values(ch_id)['cluster_members'].add(veh_id)
-        ch_table.values(ch_id)['sub_cluster_members'].add(veh_id)
-        ch_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
-        ch_table.values(ch_id)['gate_chs']. \
-            update(ch_table.values(ch_id)['gate_chs'].
+        bus_table.values(ch_id)['cluster_members'].add(veh_id)
+        bus_table.values(ch_id)['sub_cluster_members'].add(veh_id)
+        bus_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+        bus_table.values(ch_id)['gate_chs']. \
+            update(bus_table.values(ch_id)['gate_chs'].
                    union(veh_table.values(veh_id)['other_chs']))
 
     veh_table.values(veh_id)['other_chs']. \
@@ -265,12 +275,12 @@ def add_sub_member(ch_id, ch_table,
     for other_ch in veh_table.values(veh_id)['other_chs']:
         net_graph.add_edge(other_ch, veh_id)
 
-    return (ch_table, veh_table,
+    return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
             net_graph)
 
 
-def remove_member(mem, ch_id, veh_table, ch_table, config,
+def remove_member(mem, ch_id, veh_table, bus_table, config,
                   net_graph, stand_alone, zone_stand_alone):
     """
     This function would remove a cluster member from the cluster
@@ -278,31 +288,39 @@ def remove_member(mem, ch_id, veh_table, ch_table, config,
     :param mem:
     :param ch_id:
     :param veh_table:
-    :param ch_table:
+    :param bus_table:
     :param config:
     :param net_graph:
     :param stand_alone:
     :param zone_stand_alone:
     :return:
     """
-    ch_table.values(ch_id)['cluster_members'].remove(mem)
+    temp_sub_mem = veh_table.values(mem)['sub_members']
+    for s_m in temp_sub_mem:
+        (veh_table, bus_table, net_graph,
+         stand_alone, zone_stand_alone) = remove_sub_member(s_m, mem, ch_id, veh_table, bus_table, config,
+                                                            net_graph, stand_alone, zone_stand_alone)
+    veh_table.values(mem)['counter'] = config.counter
+    veh_table.values(mem)['priority_ch'] = ch_id
+    veh_table.values(mem)['priority_counter'] = config.priority_counter
+    if 'bus' in ch_id:
+        bus_table.values(ch_id)['cluster_members'].remove(mem)
+    else:
+        veh_table.values(ch_id)['cluster_members'].remove(mem)
+    stand_alone.add(mem)
+    zone_stand_alone[veh_table.values(mem)['zone']].add(mem)
+    net_graph.remove_edge(ch_id, mem)
     veh_table.values(mem)['primary_ch'] = None
     veh_table.values(mem)['secondary_ch'] = None
     veh_table.values(mem)['cluster_record'].append(None, {'start_time': None, 'ef': None,
                                                           'timer': None,
                                                           'interrupt': list()})
-    veh_table.values(mem)['counter'] = config.counter
-    veh_table.values(mem)['priority_ch'] = ch_id
-    veh_table.values(mem)['priority_counter'] = config.priority_counter
-    stand_alone.add(mem)
-    zone_stand_alone[veh_table.values(mem)['zone']].add(mem)
-    net_graph.remove_edge(ch_id, mem)
 
-    return (veh_table, ch_table, net_graph,
+    return (veh_table, bus_table, net_graph,
             stand_alone, zone_stand_alone)
 
 
-def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, ch_table, config,
+def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config,
                       net_graph, stand_alone, zone_stand_alone):
     """
     This function would remove a sub_cluster member from the cluster
@@ -311,13 +329,26 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, ch_table, config,
     :param sub_ch_id:
     :param ch_id:
     :param veh_table:
-    :param ch_table:
+    :param bus_table:
     :param config:
     :param net_graph:
     :param stand_alone:
     :param zone_stand_alone:
     :return:
     """
+
+    veh_table.values(sub_mem_id)['priority_ch'] = ch_id
+    veh_table.values(sub_mem_id)['priority_counter'] = config.priority_counter
+    stand_alone.add(sub_mem_id)
+    zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
+    veh_table.values(sub_ch_id)['sub_members'].remove(sub_mem_id)
+    net_graph.remove_edge(sub_mem_id, sub_ch_id)
+    if 'bus' in ch_id:
+        bus_table.values(ch_id)['cluster_members'].remove(sub_mem_id)
+        bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
+    else:
+        veh_table.values(ch_id)['cluster_members'].remove(sub_mem_id)
+        veh_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
     veh_table.values(sub_mem_id)['primary_ch'] = None
     veh_table.values(sub_mem_id)['secondary_ch'] = None
     veh_table.values(sub_mem_id)['cluster_record'].append(None,
@@ -325,15 +356,8 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, ch_table, config,
                                                            'ef': None,
                                                            'timer': None,
                                                            'interrupt': list()})
-    veh_table.values(sub_mem_id)['priority_ch'] = ch_id
-    veh_table.values(sub_mem_id)['priority_counter'] = config.priority_counter
-    stand_alone.add(sub_mem_id)
-    zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
-    net_graph.remove_edge(sub_mem_id, sub_ch_id)
-    ch_table.values(ch_id)['cluster_members'].remove(sub_mem_id)
-    ch_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
 
-    return (veh_table, ch_table, net_graph,
+    return (veh_table, bus_table, net_graph,
             stand_alone, zone_stand_alone)
 
 
