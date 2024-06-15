@@ -152,6 +152,7 @@ class DataTable:
 
         # removing the buses, that have left the understudied area, from self.bus_table and self.zone_buses
         for k in (self.bus_table.ids() - bus_ids):
+            print(k, self.veh_table.values(k)['cluster_members'])
             temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
             for m in temp_cluster_members:
                 if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
@@ -170,7 +171,8 @@ class DataTable:
                         self.veh_table.values(m)['priority_ch'] = None
                         self.veh_table.values(m)['priority_counter'] = config.priority_counter
 
-                    elif self.veh_table.values(m)['secondary_ch'] is None:
+                    elif ((m in self.veh_table.values(k)['cluster_members']) and
+                            (self.veh_table.values(m)['secondary_ch'] is None)):
                         (self.veh_table, self.bus_table, self.net_graph,
                          self.stand_alone, self.zone_stand_alone) = util.remove_member(m, k, self.veh_table,
                                                                                        self.bus_table, config,
@@ -195,7 +197,7 @@ class DataTable:
                 temp_cluster_members = self.veh_table.values(k)['cluster_members'].copy()
                 for m in temp_cluster_members:
                     # if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
-                    if ((m in self.veh_table.values(k)['cluster_members']()) and
+                    if ((m in self.veh_table.values(k)['cluster_members']) and
                             (self.veh_table.values(m)['secondary_ch'] is not None)):    # because m is might be removed
                         # from the cluster_members if it was a sum_member and its secondary_ch is already removed
                         # from the cluster
@@ -211,7 +213,9 @@ class DataTable:
                         # since k is not inside the area anymore, the priority_ch must be None
                         self.veh_table.values(m)['priority_ch'] = None
                         self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                    elif self.veh_table.values(m)['secondary_ch'] is None:
+
+                    elif ((m in self.veh_table.values(k)['cluster_members']) and
+                            (self.veh_table.values(m)['secondary_ch'] is None)):
                         (self.veh_table, self.bus_table, self.net_graph,
                          self.stand_alone, self.zone_stand_alone) = util.remove_member(m, k, self.veh_table,
                                                                                        self.bus_table, config,
@@ -307,27 +311,15 @@ class DataTable:
                 temp_cluster_members = self.veh_table.values(veh_id)['cluster_members'].copy()
 
                 for m in temp_cluster_members:
-                    if self.veh_table.values(m)['secondary_ch'] is None:
-                        dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
-                        if dist > min(self.veh_table.values(veh_id)['trans_range'],
-                                      self.veh_table.values(m)['trans_range']):
-                            # remove 'm' from veh_id which is a CH  as 'm' is away of veh_id
-                            if m in self.veh_table.values(veh_id)['cluster_members']:
-                                (self.veh_table, self.bus_table, self.net_graph,
-                                 self.stand_alone, self.zone_stand_alone) = (
-                                    util.remove_member(m, veh_id, self.veh_table, self.bus_table, config,
-                                                       self.net_graph, self.stand_alone, self.zone_stand_alone))
-
-                    elif ((m in self.veh_table.values(veh_id)['cluster_members']) and
-                          (self.veh_table.values(m)['secondary_ch'] is not None)):
-                        sec_ch = self.veh_table.values(m)['secondary_ch']
-                        dist = util.det_dist(sec_ch, self.veh_table, m, self.veh_table)
-                        if dist > min(self.veh_table.values(veh_id)['trans_range'],
-                                      self.veh_table.values(sec_ch)['trans_range']):
+                    dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
+                    if dist > min(self.veh_table.values(veh_id)['trans_range'],
+                                  self.veh_table.values(m)['trans_range']):
+                        # remove 'm' from veh_id which is a CH  as 'm' is away of veh_id
+                        if m in self.veh_table.values(veh_id)['cluster_members']:
                             (self.veh_table, self.bus_table, self.net_graph,
                              self.stand_alone, self.zone_stand_alone) = (
-                                util.remove_sub_member(m, sec_ch, veh_id, self.veh_table, self.bus_table, config,
-                                                       self.net_graph, self.stand_alone, self.zone_stand_alone))
+                                util.remove_member(m, veh_id, self.veh_table, self.bus_table, config,
+                                                   self.net_graph, self.stand_alone, self.zone_stand_alone))
 
                 # if the veh_id is a ch and does not have any member, after changing its zone, it won't remain as a ch
                 # unless get selected by another vehicles or can't find a cluster head after the counter
@@ -502,7 +494,7 @@ class DataTable:
 
             (self.bus_table, self.veh_table,
              self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
+             self.net_graph) = util.add_member(veh_ch, self.veh_table, veh_id, self.veh_table,
                                                config, ef, self.time, bus_candidates,
                                                ch_candidates, self.stand_alone,
                                                self.zone_stand_alone, self.net_graph,
@@ -550,7 +542,7 @@ class DataTable:
         n_near_sa = dict()
         pot_ch = dict()
         for veh_id in self.stand_alone:
-            self.stand_alone_test(veh_id)
+            # self.stand_alone_test(veh_id)
             near_sa[veh_id] = util.det_near_sa(veh_id, self.veh_table,
                                                self.stand_alone, self.zone_stand_alone
                                                )

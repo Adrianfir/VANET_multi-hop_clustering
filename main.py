@@ -24,7 +24,7 @@ if __name__ == "__main__":
         cluster.update(configs, area_zones)
         print(cluster.time)
         cluster.update_cluster(cluster.veh_table.ids(), configs, area_zones)
-        cluster.stand_alones_cluster(configs, area_zones)
+        # cluster.stand_alones_cluster(configs, area_zones)
         # if 'veh399' in cluster.veh_table.ids():
         #     print(cluster.veh_table.values('veh399'))
         # cluster.show_graph(configs)
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/',
     #                     '/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/', configs.fps)
     # cluster.show_graph(configs)
-    # cluster.print_table()
+    # cluster.print_table()Î
     eval_cluster = cluster.eval_cluster(configs)
     print('evaluation: ', eval_cluster)
     print('\n')
