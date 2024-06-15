@@ -155,32 +155,19 @@ class DataTable:
             print(k, self.veh_table.values(k)['cluster_members'])
             temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
             for m in temp_cluster_members:
-                if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
-                    if ((m in self.veh_table.values(k)['cluster_members']()) and
-                            (self.veh_table.values(m)['secondary_ch'] is not None)):  # because m is might be removed
-                        # from the cluster_members if it was a sum_member and its secondary_ch is already removed
-                        # from the cluster:
-                        secondary_ch = self.veh_table.values(m)['secondary_ch']
-                        (self.veh_table, self.bus_table, self.net_graph,
-                         self.stand_alone, self.zone_stand_alone) = util.remove_sub_member(m, secondary_ch, k,
-                                                                                           self.veh_table,
-                                                                                           self.bus_table,
-                                                                                           config, self.net_graph,
-                                                                                           self.stand_alone,
-                                                                                           self.zone_stand_alone)
-                        self.veh_table.values(m)['priority_ch'] = None
-                        self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                if m in self.veh_table.values(k)['cluster_members']:  # because m is might be removed
+                    # from the cluster_members if it was a sum_member and its secondary_ch is already removed
+                    # from the cluster:
 
-                    elif ((m in self.veh_table.values(k)['cluster_members']) and
-                            (self.veh_table.values(m)['secondary_ch'] is None)):
-                        (self.veh_table, self.bus_table, self.net_graph,
-                         self.stand_alone, self.zone_stand_alone) = util.remove_member(m, k, self.veh_table,
-                                                                                       self.bus_table, config,
-                                                                                       self.net_graph, self.stand_alone,
-                                                                                       self.zone_stand_alone)
-                        # since k is not inside the area anymore, the priority_ch must be None
-                        self.veh_table.values(m)['priority_ch'] = None
-                        self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                    (self.veh_table, self.bus_table, self.net_graph,
+                     self.stand_alone, self.zone_stand_alone) = util.remove_member(m, k, self.veh_table,
+                                                                                   self.bus_table, config,
+                                                                                   self.net_graph, self.stand_alone,
+                                                                                   self.zone_stand_alone,
+                                                                                   ch_stays=False)
+                    # since k is not inside the area anymore, the priority_ch must be None
+                    self.veh_table.values(m)['priority_ch'] = None
+                    self.veh_table.values(m)['priority_counter'] = config.priority_counter
 
             self.zone_buses[self.bus_table.values(k)['zone']].remove(k)
             self.zone_ch[self.bus_table.values(k)['zone']].remove(k)
@@ -197,57 +184,37 @@ class DataTable:
                 temp_cluster_members = self.veh_table.values(k)['cluster_members'].copy()
                 for m in temp_cluster_members:
                     # if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
-                    if ((m in self.veh_table.values(k)['cluster_members']) and
-                            (self.veh_table.values(m)['secondary_ch'] is not None)):    # because m is might be removed
+                    if m in self.veh_table.values(k)['cluster_members']:    # because m is might be removed
                         # from the cluster_members if it was a sum_member and its secondary_ch is already removed
                         # from the cluster
-                        secondary_ch = self.veh_table.values(m)['secondary_ch']
-                        (self.veh_table, self.bus_table, self.net_graph,
-                         self.stand_alone, self.zone_stand_alone) = util.remove_sub_member(m, secondary_ch, k,
-                                                                                           self.veh_table,
-                                                                                           self.bus_table,
-                                                                                           config, self.net_graph,
-                                                                                           self.stand_alone,
-                                                                                           self.zone_stand_alone)
-
-                        # since k is not inside the area anymore, the priority_ch must be None
-                        self.veh_table.values(m)['priority_ch'] = None
-                        self.veh_table.values(m)['priority_counter'] = config.priority_counter
-
-                    elif ((m in self.veh_table.values(k)['cluster_members']) and
-                            (self.veh_table.values(m)['secondary_ch'] is None)):
                         (self.veh_table, self.bus_table, self.net_graph,
                          self.stand_alone, self.zone_stand_alone) = util.remove_member(m, k, self.veh_table,
                                                                                        self.bus_table, config,
                                                                                        self.net_graph, self.stand_alone,
-                                                                                       self.zone_stand_alone)
-                        self.veh_table.values(m)['priority_ch'] = None
-                        self.veh_table.values(m)['priority_counter'] = config.priority_counter
+                                                                                       self.zone_stand_alone,
+                                                                                       ch_stays=False)
 
                 self.zone_ch[self.veh_table.values(k)['zone']].remove(k)
                 self.all_chs.remove(k)
 
             elif self.veh_table.values(k)['primary_ch'] is not None:
                 k_ch = self.veh_table.values(k)['primary_ch']
-                temp_cluster_members = self.veh_table.values(k)['sub_members'].copy()
-                for m in temp_cluster_members:
-
+                if self.veh_table.values(k)['secondary_ch'] is not None:
+                    secondary_ch = self.veh_table.values(k)['secondary_ch']
                     (self.veh_table, self.bus_table, self.net_graph,
-                     self.stand_alone, self.zone_stand_alone) = util.remove_sub_member(m, k, k_ch,
+                     self.stand_alone, self.zone_stand_alone) = util.remove_sub_member(k, secondary_ch, k_ch,
                                                                                        self.veh_table,
                                                                                        self.bus_table, config,
                                                                                        self.net_graph,
                                                                                        self.stand_alone,
                                                                                        self.zone_stand_alone)
 
-                    self.stand_alone.add(m)
-                    self.zone_stand_alone[self.veh_table.values(m)['zone']].add(m)
-
-                (self.veh_table, self.bus_table, self.net_graph,
-                 self.stand_alone, self.zone_stand_alone) = util.remove_member(k, k_ch, self.veh_table,
-                                                                               self.bus_table, config,
-                                                                               self.net_graph, self.stand_alone,
-                                                                               self.zone_stand_alone)
+                else:
+                    (self.veh_table, self.bus_table, self.net_graph,
+                     self.stand_alone, self.zone_stand_alone) = util.remove_member(k, k_ch, self.veh_table,
+                                                                                   self.bus_table, config,
+                                                                                   self.net_graph, self.stand_alone,
+                                                                                   self.zone_stand_alone)
 
             elif k in self.stand_alone:
                 self.stand_alone.remove(k)

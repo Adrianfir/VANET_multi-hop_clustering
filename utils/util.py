@@ -282,9 +282,11 @@ def add_sub_member(ch_id, bus_table,
 
 
 def remove_member(mem, ch_id, veh_table, bus_table, config,
-                  net_graph, stand_alone, zone_stand_alone):
+                  net_graph, stand_alone, zone_stand_alone,
+                  ch_stays=True):
     """
     This function would remove a cluster member from the cluster
+    :param ch_stays:
     :type
     :param mem:
     :param ch_id:
@@ -297,20 +299,15 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     :return:
     """
     temp_sub_mem = veh_table.values(mem)['sub_members'].copy()
-    print('1', mem, veh_table.values(mem)['sub_members'])
-    print('2', ch_id, veh_table.values(mem)['cluster_members'],
-          veh_table.values(mem)['sub_cluster_members']) if 'veh' in ch_id else (
-        print('2', ch_id, bus_table.values(ch_id)['cluster_members'], bus_table.values(ch_id)['sub_cluster_members']))
     for s_m in temp_sub_mem:
         (veh_table, bus_table, net_graph,
          stand_alone, zone_stand_alone) = remove_sub_member(s_m, mem, ch_id, veh_table, bus_table, config,
                                                             net_graph, stand_alone, zone_stand_alone)
-    print('3', mem, veh_table.values(mem)['sub_members'])
-    print('4', ch_id, veh_table.values(mem)['cluster_members'],
-          veh_table.values(mem)['sub_cluster_members']) if 'veh' in ch_id else (
-        print('4', ch_id, bus_table.values(ch_id)['cluster_members'], bus_table.values(ch_id)['sub_cluster_members']))
     veh_table.values(mem)['counter'] = config.counter
-    veh_table.values(mem)['priority_ch'] = ch_id
+    if ch_stays is True:
+        veh_table.values(mem)['priority_ch'] = ch_id
+    else:
+        veh_table.values(mem)['priority_ch'] = None
     veh_table.values(mem)['priority_counter'] = config.priority_counter
     if 'bus' in ch_id:
         bus_table.values(ch_id)['cluster_members'].remove(mem)
@@ -330,7 +327,7 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
 
 
 def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config,
-                      net_graph, stand_alone, zone_stand_alone):
+                      net_graph, stand_alone, zone_stand_alone, ch_stays=True):
     """
     This function would remove a sub_cluster member from the cluster
     :type
@@ -343,9 +340,13 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     :param net_graph:
     :param stand_alone:
     :param zone_stand_alone:
+    :param ch_stays:
     :return:
     """
-    veh_table.values(sub_mem_id)['priority_ch'] = ch_id
+    if ch_stays is True:
+        veh_table.values(sub_mem_id)['priority_ch'] = ch_id
+    else:
+        veh_table.values(sub_mem_id)['priority_ch'] = None
     veh_table.values(sub_mem_id)['priority_counter'] = config.priority_counter
     stand_alone.add(sub_mem_id)
     zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
@@ -493,7 +494,7 @@ def det_near_ch(veh_id, veh_table, bus_table,
 
     for j in neigh_bus:
         euclidian_dist = det_dist(veh_id, veh_table, j, bus_table)
-
+        print(veh_id, j)
         if euclidian_dist <= min(veh_table.values(veh_id)['trans_range'],
                                  bus_table.values(j)['trans_range']):
             bus_candidates.add(j)
