@@ -31,14 +31,11 @@ if __name__ == "__main__":
     # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/',
     #                     '/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/', configs.fps)
     # cluster.show_graph(configs)
-    # cluster.print_table()Î
+    cluster.print_table()
     eval_cluster = cluster.eval_cluster(configs)
     print('evaluation: ', eval_cluster)
     print('\n')
     print('chs: ', cluster.all_chs)
     print('stand_alones: ', cluster.stand_alone)
     print("execution time: ", end_time - start_time)
-    for i in cluster.veh_table.ids():
-        cluster.veh_table.values(i)['cluster_record'].print_list()
-        print('\n\n')
 

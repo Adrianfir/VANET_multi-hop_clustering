@@ -177,6 +177,7 @@ class DataTable:
             self.net_graph.remove_vertex(k)
 
         # removing the vehicles, that have left the understudied area, from self.veh_table and self.zone_vehicles
+
         for k in (self.veh_table.ids() - veh_ids):
             if self.veh_table.values(k)['cluster_head'] is True:
                 temp_cluster_members = self.veh_table.values(k)['cluster_members'].copy()
@@ -205,14 +206,16 @@ class DataTable:
                                                                                        self.bus_table, config,
                                                                                        self.net_graph,
                                                                                        self.stand_alone,
-                                                                                       self.zone_stand_alone)
+                                                                                       self.zone_stand_alone,
+                                                                                       sub_mem_stays=False)
 
                 else:
                     (self.veh_table, self.bus_table, self.net_graph,
                      self.stand_alone, self.zone_stand_alone) = util.remove_member(k, k_ch, self.veh_table,
                                                                                    self.bus_table, config,
                                                                                    self.net_graph, self.stand_alone,
-                                                                                   self.zone_stand_alone)
+                                                                                   self.zone_stand_alone,
+                                                                                   mem_stays=False)
 
             elif k in self.stand_alone:
                 self.stand_alone.remove(k)
@@ -224,6 +227,7 @@ class DataTable:
 
             self.veh_table.remove(k)
             self.net_graph.remove_vertex(k)
+
 
     def update_cluster(self, veh_ids, config, zones):
 
