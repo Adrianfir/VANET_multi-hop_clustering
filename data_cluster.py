@@ -228,7 +228,6 @@ class DataTable:
             self.veh_table.remove(k)
             self.net_graph.remove_vertex(k)
 
-
     def update_cluster(self, veh_ids, config, zones):
 
         """
@@ -474,7 +473,8 @@ class DataTable:
     def multi_hop(self, veh_id, config, zones, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
 
-        if self.veh_table.values(veh_id)['priority_counter'] != 0:
+        if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
+                and (self.veh_table.values(veh_id)['priority_ch'] is not 0)):
             bus_candidates, ch_candidates, sub_ch_candidates = util.priority_clusters(veh_id, self.veh_table,
                                                                                       bus_candidates, ch_candidates,
                                                                                       sub_ch_candidates

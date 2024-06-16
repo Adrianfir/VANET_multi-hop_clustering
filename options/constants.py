@@ -33,11 +33,11 @@ class Inputs:
         start_time = 1600
         iter = 60
         counter = 4
-        priority_counter = 2
+        priority_counter = 3
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10
-        weights = np.array([0.9, 0.1, 0])       # direction's angle, speed, distance
+        weights = np.array([0, 1, 0])       # direction's angle, speed, distance
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,

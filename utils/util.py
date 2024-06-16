@@ -689,12 +689,37 @@ def priority_clusters(veh_id, veh_table, bus_candidates,
     :param sub_ch_candidates:
     :return:
     """
-    sub_ch_candidates_priorities = set([i for i in sub_ch_candidates if
-                                        veh_table.values(i)['primary_ch'] == veh_table.values(veh_id)['priority_ch']])
-    (sub_ch_candidates_priorities, ch_candidates, bus_candidates) = (sub_ch_candidates, ch_candidates, bus_candidates) \
-        if len(sub_ch_candidates_priorities) == 0 else (sub_ch_candidates_priorities, set(), set())
+    if 'veh' in veh_table.values(veh_id)['priority_ch']:
+        for prior in ch_candidates:
+            if prior == veh_table.values(veh_id)['priority_ch']:
+                ch_candidates = set()
+                ch_candidates.add(prior)
+                bus_candidates = set()
 
-    return bus_candidates, ch_candidates, sub_ch_candidates_priorities
+        temp_sub_ch_candidates = set()
+        for prior in sub_ch_candidates:
+            if veh_table.values(prior)['primary_ch'] == veh_table.values(veh_id)['priority_ch']:
+                temp_sub_ch_candidates.add(prior)
+        if len(temp_sub_ch_candidates) != 0:
+            sub_ch_candidates = temp_sub_ch_candidates.copy()
+            bus_candidates = set()
+
+    elif 'bus' in veh_table.values(veh_id)['priority_ch']:
+        for prior in bus_candidates:
+            if prior == veh_table.values(veh_id)['priority_ch']:
+                bus_candidates = set()
+                bus_candidates.add(prior)
+                ch_candidates = set()
+
+        temp_sub_ch_candidates = set()
+        for prior in sub_ch_candidates:
+            if veh_table.values(prior)['primary_ch'] == veh_table.values(veh_id)['priority_ch']:
+                temp_sub_ch_candidates.add(prior)
+        if len(temp_sub_ch_candidates) != 0:
+            sub_ch_candidates = temp_sub_ch_candidates.copy()
+            bus_candidates = set()
+
+    return bus_candidates, ch_candidates, sub_ch_candidates
 
 
 def det_beta(bus_candidates, ch_candidates,
