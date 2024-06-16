@@ -276,8 +276,8 @@ class DataTable:
             elif (self.veh_table.values(veh_id)['in_area'] is True) and \
                     (self.veh_table.values(veh_id)['primary_ch'] is None) and \
                     (self.veh_table.values(veh_id)['cluster_head'] is True):
-                temp_cluster_members = self.veh_table.values(veh_id)['cluster_members'].copy()
 
+                temp_cluster_members = self.veh_table.values(veh_id)['cluster_members'].copy()
                 for m in temp_cluster_members:
                     dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
                     if dist > min(self.veh_table.values(veh_id)['trans_range'],
@@ -317,6 +317,7 @@ class DataTable:
             elif (self.veh_table.values(veh_id)['in_area'] is True) and \
                     (self.veh_table.values(veh_id)['cluster_head'] is False) and \
                     (self.veh_table.values(veh_id)['primary_ch'] is not None):
+
                 ch_id = self.veh_table.values(veh_id)['primary_ch']
                 if 'bus' in ch_id:
                     temp_table = self.bus_table
@@ -327,7 +328,6 @@ class DataTable:
                     dist_to_primarych = util.det_dist(veh_id, self.veh_table, ch_id, temp_table)
                 else:
                     secondary_ch = self.veh_table.values(veh_id)['secondary_ch']
-
                     dist_to_secondarych = util.det_dist(veh_id, self.veh_table, secondary_ch, self.veh_table)
 
                 if (((self.veh_table.values(veh_id)['secondary_ch'] is None) and
@@ -342,29 +342,29 @@ class DataTable:
                     self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
                                                                       union(ch_candidates))
                     # assert self.veh_table.values(veh_id)['primary_ch'] in self.veh_table.values(veh_id)['other_chs']
-                    if self.veh_table.values(veh_id)['primary_ch'] in self.veh_table.values(veh_id)['other_chs']:
-                        self.veh_table.values(veh_id)['other_chs'].remove(self.veh_table.values(veh_id)['primary_ch'])
+                    if ch_id in self.veh_table.values(veh_id)['other_chs']:
+                        self.veh_table.values(veh_id)['other_chs'].remove(ch_id)
                     # the following conditional is for making sure that self.update_cluster called inside
                     # self.stand_alones_cluster would not add 1 to timer of cluster_record
                     if self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] + \
                             self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] - 1 != self.time:
                         self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
                     # updating 'gates' and 'gate_chs' considering if the primary_ch is bus or vehicle-ch
-                    if 'bus' in self.veh_table.values(veh_id)['primary_ch']:
-                        self.bus_table.values(self.veh_table.values(veh_id)['primary_ch'])['gates'][veh_id] = \
+                    if 'bus' in ch_id:
+                        self.bus_table.values(ch_id)['gates'][veh_id] = \
                             self.veh_table.values(veh_id)['other_chs']
-                        self.bus_table.values(self.veh_table.values(veh_id)['primary_ch'])['gate_chs']. \
-                            update(self.bus_table.values(self.veh_table.values(veh_id)['primary_ch'])['gate_chs'].
+                        self.bus_table.values(ch_id)['gate_chs']. \
+                            update(self.bus_table.values(ch_id)['gate_chs'].
                                    union(self.veh_table.values(veh_id)['other_chs']))
                         self.veh_table.values(veh_id)['other_vehs'] = other_vehs
                     else:
-                        self.veh_table.values(self.veh_table.values(veh_id)['primary_ch'])['gates'][veh_id] = \
+                        self.veh_table.values(ch_id)['gates'][veh_id] = \
                             self.veh_table.values(veh_id)['other_chs']
-                        self.veh_table.values(self.veh_table.values(veh_id)['primary_ch'])['gate_chs']. \
-                            update(self.veh_table.values(self.veh_table.values(veh_id)['primary_ch'])['gate_chs'].
+                        self.veh_table.values(ch_id)['gate_chs']. \
+                            update(self.veh_table.values(ch_id)['gate_chs'].
                                    union(self.veh_table.values(veh_id)['other_chs']))
                         self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-                    self.net_graph.add_edge(self.veh_table.values(veh_id)['primary_ch'], veh_id)
+                    self.net_graph.add_edge(ch_id, veh_id)
                     for other_ch in self.veh_table.values(veh_id)['other_chs']:
                         self.net_graph.add_edge(veh_id, other_ch)
                     continue
@@ -421,6 +421,7 @@ class DataTable:
         # finding buses' other_chs
         for bus in self.bus_table.ids():
             self.bus_table.values(bus)['other_chs'] = set()
+        for bus in self.bus_table.ids():
             nearby_chs = util.det_buses_other_ch(bus, self.veh_table, self.bus_table,
                                                  self.zone_buses, self.zone_ch)
             self.bus_table.values(bus)['other_chs'].update(self.bus_table.values(bus)['other_chs'].union(nearby_chs))
