@@ -7,7 +7,8 @@ __all__ = [
     'det_border_speed_count', 'det_buses_other_ch', 'det_con_factor', 'det_dist', 'det_linkage_fac',
     'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca', 'image_num', 'initiate_new_bus',
     'initiate_new_veh', 'mac_address', 'make_slideshow', 'middle_zone', 'presence', 'priority_clusters',
-    'update_sai', 'update_veh_table'
+    'remove_member', 'remove_sub_member', 'save_img', 'set_ch', 'set_ch_to_veh', 'sumo_net_info',
+    'update_sai', 'update_bus_table', 'sumo_net_info', 'update_sa_net_graph', 'update_veh_table'
 ]
 
 import numpy as np
@@ -491,10 +492,8 @@ def det_near_ch(veh_id, veh_table, bus_table,
     for neigh_z in veh_table.values(veh_id)['neighbor_zones']:
         neigh_bus += zone_buses[neigh_z]  # adding all the buses in the neighbor zones to a list
         neigh_veh += zone_vehicles[neigh_z]
-
     for j in neigh_bus:
         euclidian_dist = det_dist(veh_id, veh_table, j, bus_table)
-        print(veh_id, j)
         if euclidian_dist <= min(veh_table.values(veh_id)['trans_range'],
                                  bus_table.values(j)['trans_range']):
             bus_candidates.add(j)

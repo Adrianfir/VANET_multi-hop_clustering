@@ -149,10 +149,8 @@ class DataTable:
                                                                    float(veh.getAttribute('x'))
                                                                    )
                                           )
-
         # removing the buses, that have left the understudied area, from self.bus_table and self.zone_buses
         for k in (self.bus_table.ids() - bus_ids):
-            print(k, self.veh_table.values(k)['cluster_members'])
             temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
             for m in temp_cluster_members:
                 if m in self.veh_table.values(k)['cluster_members']:  # because m is might be removed
@@ -461,7 +459,7 @@ class DataTable:
 
             (self.bus_table, self.veh_table,
              self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(veh_ch, self.veh_table, veh_id, self.veh_table,
+             self.net_graph) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
                                                config, ef, self.time, bus_candidates,
                                                ch_candidates, self.stand_alone,
                                                self.zone_stand_alone, self.net_graph,
@@ -501,7 +499,6 @@ class DataTable:
                                                    ch_candidates, self.stand_alone,
                                                    self.zone_stand_alone, self.net_graph,
                                                    other_vehs)
-
         self.check_general_framework(veh_id)
 
     def stand_alones_cluster(self, configs, zones):
