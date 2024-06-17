@@ -374,7 +374,7 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
 
 
 def set_ch(veh_id, veh_table, all_chs, stand_alone,
-           zone_stand_alone, zone_ch, config):
+           zone_stand_alone, zone_ch, config, its_sas_clustering=False):
     """
     This function would update the information of a vehicle turning into a CH
     :param veh_id:
@@ -393,8 +393,15 @@ def set_ch(veh_id, veh_table, all_chs, stand_alone,
     veh_table.values(veh_id)['counter'] = config.counter
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
     veh_table.values(veh_id)['priority_ch'] = None
-    stand_alone.remove(veh_id)
-    zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+    if its_sas_clustering is False:
+        stand_alone.remove(veh_id)
+        zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+    else:
+        try:
+            stand_alone.remove(veh_id)
+            zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+        except KeyError:
+            pass
 
     return (veh_table, all_chs, stand_alone,
             zone_stand_alone, zone_ch)
@@ -666,7 +673,7 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
                        np.array([theta_sim, speed_sim, theta_dist]))
         if ('veh' in j) and (table.values(j)['primary_ch'] is not None)\
                 and (table.values(j)['secondary_ch'] is None):
-            ef = np.average([ef, table.values(j)['cluster_record'].tail.value['ef']])
+            ef = np.average([ef, ef, table.values(j)['cluster_record'].tail.value['ef']])
 
         ef *= beta  # the way beta is working is that if both chs, sub_chs, and buses are nearby, the beta
         # related to the buses would be multiplied if the connection would be single-hop not multi-hop. Hence, for a
@@ -717,7 +724,7 @@ def priority_clusters(veh_id, veh_table, bus_candidates,
                 temp_sub_ch_candidates.add(prior)
         if len(temp_sub_ch_candidates) != 0:
             sub_ch_candidates = temp_sub_ch_candidates.copy()
-            bus_candidates = set()
+            ch_candidates = set()
 
     return bus_candidates, ch_candidates, sub_ch_candidates
 
