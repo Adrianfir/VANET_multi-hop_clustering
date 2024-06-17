@@ -319,6 +319,9 @@ class DataTable:
                     (self.veh_table.values(veh_id)['primary_ch'] is not None):
 
                 ch_id = self.veh_table.values(veh_id)['primary_ch']
+                dist_to_primarych = float()
+                dist_to_secondarych = float()
+
                 if 'bus' in ch_id:
                     temp_table = self.bus_table
                 else:
@@ -443,7 +446,26 @@ class DataTable:
 
     def single_hop(self, veh_id, config, zones,
                    bus_candidates, ch_candidates, other_vehs):
-        if len(bus_candidates) > 0:
+        prior_bus_candidates = set()
+        prior_ch_candidates = set()
+        if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
+                and (self.veh_table.values(veh_id)['priority_ch'] is not 0)):
+            # Here, in single_hop the sub_ch_candidates would be empty
+            prior_bus_candidates, prior_ch_candidates, prior_sub_ch_candidates = util.priority_clusters(veh_id,
+                                                                                                        self.veh_table,
+                                                                                                        bus_candidates,
+                                                                                                        ch_candidates,
+                                                                                                        set())
+        if len(prior_bus_candidates) + len(prior_ch_candidates) != 0:
+            # to calculate ef for the bus which is the priority_ch
+            if len(prior_ch_candidates) == 0:
+                bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
+                                            prior_bus_candidates, config)
+            elif len(prior_bus_candidates) == 0:
+                veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
+                                            prior_ch_candidates, config)
+
+        elif len(bus_candidates) > 0:
 
             bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
                                         bus_candidates, config)  # determine the best from bus_candidates
