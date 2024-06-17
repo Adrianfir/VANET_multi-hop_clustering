@@ -462,11 +462,25 @@ class DataTable:
             if len(prior_ch_candidates) == 0:
                 bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
                                             prior_bus_candidates, config)
+                (self.bus_table, self.veh_table,
+                 self.stand_alone, self.zone_stand_alone,
+                 self.net_graph) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
+                                                   config, ef, self.time, bus_candidates,
+                                                   ch_candidates, self.stand_alone,
+                                                   self.zone_stand_alone, self.net_graph,
+                                                   other_vehs)
             elif len(prior_bus_candidates) == 0:
                 veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
                                             prior_ch_candidates, config)
+                (self.bus_table, self.veh_table,
+                 self.stand_alone, self.zone_stand_alone,
+                 self.net_graph) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
+                                                   config, ef, self.time, bus_candidates,
+                                                   ch_candidates, self.stand_alone,
+                                                   self.zone_stand_alone, self.net_graph,
+                                                   other_vehs)
 
-        if len(bus_candidates) > 0:
+        elif (len(bus_candidates) > 0) and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0):
 
             bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
                                         bus_candidates, config)  # determine the best from bus_candidates
@@ -479,7 +493,8 @@ class DataTable:
                                                self.zone_stand_alone, self.net_graph,
                                                other_vehs)
 
-        elif (len(bus_candidates) == 0) and (len(ch_candidates) > 0):
+        elif ((len(bus_candidates) == 0) and (len(ch_candidates) > 0)
+              and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0)):
 
             veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
                                         zones, ch_candidates, config)  # determine the best from vehicles
@@ -548,7 +563,9 @@ class DataTable:
         selected_chs = set()
         mem_control = set()  # after a vehicle become a member, add it to this and at the beginning of the
         # for-loop, check if veh_id is in it to not do anything new and ruin it
-        temp = list(self.stand_alone.copy()).sort()
+        temp = self.stand_alone.copy()
+        temp = list(temp)
+        temp.sort()
         temp.reverse()
         for veh_id in temp:
             if (self.veh_table.values(veh_id)['cluster_head'] is True) or \
@@ -563,12 +580,12 @@ class DataTable:
                     (self.veh_table, self.all_chs, self.stand_alone,
                      self.zone_stand_alone, self.zone_ch) = util.set_ch(veh_id, self.veh_table, self.all_chs,
                                                                         self.stand_alone, self.zone_stand_alone,
-                                                                        self.zone_ch, configs)
+                                                                        self.zone_ch, configs, its_sas_clustering=True)
 
                     (self.veh_table, self.all_chs, self.stand_alone,
                      self.zone_stand_alone, self.zone_ch) = util.set_ch(veh_id_2, self.veh_table, self.all_chs,
                                                                         self.stand_alone, self.zone_stand_alone,
-                                                                        self.zone_ch, configs)
+                                                                        self.zone_ch, configs, its_sas_clustering=True)
 
                     self.veh_table.values(veh_id)['other_chs'].add(veh_id_2)
                     self.veh_table.values(veh_id_2)['other_chs'].add(veh_id)
@@ -585,7 +602,7 @@ class DataTable:
                 (self.veh_table, self.all_chs, self.stand_alone,
                  self.zone_stand_alone, self.zone_ch) = util.set_ch(ch, self.veh_table, self.all_chs,
                                                                     self.stand_alone, self.zone_stand_alone,
-                                                                    self.zone_ch, configs)
+                                                                    self.zone_ch, configs, its_sas_clustering=True)
 
                 (self.bus_table, self.veh_table,
                  self.stand_alone, self.zone_stand_alone,

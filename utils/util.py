@@ -673,7 +673,7 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
                        np.array([theta_sim, speed_sim, theta_dist]))
         if ('veh' in j) and (table.values(j)['primary_ch'] is not None)\
                 and (table.values(j)['secondary_ch'] is None):
-            ef = np.average([ef, ef, table.values(j)['cluster_record'].tail.value['ef']])
+            ef = np.average([ef, table.values(j)['cluster_record'].tail.value['ef']])
 
         ef *= beta  # the way beta is working is that if both chs, sub_chs, and buses are nearby, the beta
         # related to the buses would be multiplied if the connection would be single-hop not multi-hop. Hence, for a
