@@ -638,6 +638,7 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
     veh_vector_y = np.multiply(euclidian_distance, np.sin(veh_alpha))
 
     min_ef = 1000000
+    nominee = None
     for j in bus_candidates.union(ch_candidates, sub_ch_candidates):
         beta, table = (beta_bus, bus_table) if 'bus' in j else (beta_ch, veh_table)
 

@@ -183,7 +183,7 @@ class DataTable:
                 temp_cluster_members = self.veh_table.values(k)['cluster_members'].copy()
                 for m in temp_cluster_members:
                     # if m in veh_ids:  # this must be veh_ids not self.veh_table.ids()
-                    if m in self.veh_table.values(k)['cluster_members']:    # because m is might be removed
+                    if m in self.veh_table.values(k)['cluster_members']:  # because m is might be removed
                         # from the cluster_members if it was a sum_member and its secondary_ch is already removed
                         # from the cluster
                         (self.veh_table, self.bus_table, self.net_graph,
@@ -244,11 +244,11 @@ class DataTable:
             (bus_candidates, ch_candidates,
              sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
                                                                self.zone_buses, self.zone_vehicles)
-            if ((len(bus_candidates) == 0) and (len(ch_candidates) == 0) and (len(sub_ch_candidates) == 0) and
+            if ((len(bus_candidates) + len(ch_candidates) + len(sub_ch_candidates) == 0) and
                     (self.veh_table.values(veh_id)['in_area'] is True) and
                     (self.veh_table.values(veh_id)['primary_ch'] is None) and
                     (self.veh_table.values(veh_id)['cluster_head'] is False)):
-                if self.veh_table.values(veh_id)['counter'] >= 1:
+                if self.veh_table.values(veh_id)['counter'] > 1:
                     self.veh_table.values(veh_id)['counter'] -= 1
                     # here priority_counter is getting modified
 
@@ -397,27 +397,28 @@ class DataTable:
                                                                                            self.stand_alone,
                                                                                            self.zone_stand_alone)
 
-                    self.update_cluster([veh_id, ], config, zones)
-                    # now the updates related to sub_cluster_members should be applied
-
-            # checking if the vehicle is in the understudied-area and if it's not in any cluster and if it's not a ch
-            elif (self.veh_table.values(veh_id)['in_area'] is True) and \
-                    (self.veh_table.values(veh_id)['primary_ch'] is None) and \
-                    (self.veh_table.values(veh_id)['cluster_head'] is False):
-
-                second_ch_candidates = []
-                for h in other_vehs:
-                    if ((self.veh_table.values(h)['primary_ch'] is not None)
-                            and (self.veh_table.values(h)['secondary_ch'] is None)):
-                        second_ch_candidates.append(h)
-                second_ch_candidates = set(second_ch_candidates)
-
-                if len(second_ch_candidates) == 0:
-                    self.single_hop(veh_id, config, zones,
-                                    bus_candidates, ch_candidates, other_vehs)
                 else:
-                    self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, second_ch_candidates,
-                                   other_vehs)
+                    continue
+                    # now the updates related to sub_cluster_members should be applied
+            self.check_general_framework(veh_id)
+        temp_stand_alone = self.stand_alone.copy()
+        for veh_id in temp_stand_alone:
+            self.veh_table.values(veh_id)['other_chs'] = set()
+            self.veh_table.values(veh_id)['gates'] = dict()
+            self.veh_table.values(veh_id)['gate_chs'] = set()
+            self.veh_table.values(veh_id)['other_vehs'] = set()
+
+            # determining the buses and cluster_head in neighbor zones
+            (bus_candidates, ch_candidates,
+             sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
+                                                               self.zone_buses, self.zone_vehicles)
+
+            if len(sub_ch_candidates) == 0:
+                self.single_hop(veh_id, config, zones,
+                                bus_candidates, ch_candidates, other_vehs)
+            else:
+                self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, sub_ch_candidates,
+                               other_vehs)
 
             self.check_general_framework(veh_id)
 
@@ -452,6 +453,7 @@ class DataTable:
         if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
                 and (self.veh_table.values(veh_id)['priority_counter'] != 0)):
             # Here, in single_hop the sub_ch_candidates would be empty
+            print(f'b_cand: {bus_candidates}, v_cand: {ch_candidates}')
             prior_bus_candidates, prior_ch_candidates, prior_sub_ch_candidates = util.priority_clusters(veh_id,
                                                                                                         self.veh_table,
                                                                                                         bus_candidates,
@@ -574,7 +576,6 @@ class DataTable:
                 continue
             if (n_near_sa[veh_id] == 1) and (list(near_sa[veh_id])[0] in near_sa.keys()):
                 if (n_near_sa[list(near_sa[veh_id])[0]]) == 1:
-
                     veh_id_2 = list(near_sa[veh_id])[0]
 
                     (self.veh_table, self.all_chs, self.stand_alone,
@@ -595,7 +596,6 @@ class DataTable:
                     continue
 
             if len(unique_pot_ch.intersection(near_sa[veh_id]) - mem_control) > 0:
-
                 ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
                                         unique_pot_ch.intersection(near_sa[veh_id]) - mem_control, configs)
                 selected_chs.add(ch)
