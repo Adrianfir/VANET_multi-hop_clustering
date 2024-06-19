@@ -321,7 +321,6 @@ class DataTable:
                 ch_id = self.veh_table.values(veh_id)['primary_ch']
                 dist_to_primarych = float()
                 dist_to_secondarych = float()
-
                 if 'bus' in ch_id:
                     temp_table = self.bus_table
                 else:
@@ -329,7 +328,7 @@ class DataTable:
                 if self.veh_table.values(veh_id)['secondary_ch'] is None:
                     secondary_ch = None
                     dist_to_primarych = util.det_dist(veh_id, self.veh_table, ch_id, temp_table)
-                else:
+                elif self.veh_table.values(veh_id)['secondary_ch'] is not None:
                     secondary_ch = self.veh_table.values(veh_id)['secondary_ch']
                     dist_to_secondarych = util.det_dist(veh_id, self.veh_table, secondary_ch, self.veh_table)
 
@@ -388,7 +387,7 @@ class DataTable:
                     else:
                         sec_ch = self.veh_table.values(veh_id)['secondary_ch']
                         ch_id = self.veh_table.values(veh_id)['primary_ch']
-
+                        # print(veh_id in veh_ids)
                         (self.veh_table, self.bus_table, self.net_graph,
                          self.stand_alone, self.zone_stand_alone) = util.remove_sub_member(veh_id, sec_ch, ch_id,
                                                                                            self.veh_table,
@@ -453,7 +452,7 @@ class DataTable:
         if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
                 and (self.veh_table.values(veh_id)['priority_counter'] != 0)):
             # Here, in single_hop the sub_ch_candidates would be empty
-            print(f'b_cand: {bus_candidates}, v_cand: {ch_candidates}')
+            # print(f'b_cand: {bus_candidates}, v_cand: {ch_candidates}')
             prior_bus_candidates, prior_ch_candidates, prior_sub_ch_candidates = util.priority_clusters(veh_id,
                                                                                                         self.veh_table,
                                                                                                         bus_candidates,

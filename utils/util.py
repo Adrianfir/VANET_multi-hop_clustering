@@ -269,7 +269,6 @@ def add_sub_member(ch_id, bus_table,
         update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
     veh_table.values(veh_id)['other_chs']. \
         update(veh_table.values(veh_id)['other_chs'].union(bus_candidates))
-    veh_table.values(sub_ch_id)['sub_cluster_members'].add(veh_id)
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
     veh_table.values(veh_id)['other_vehs'] = other_vehs
@@ -297,6 +296,7 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     :param net_graph:
     :param stand_alone:
     :param zone_stand_alone:
+    :param mem_stays:
     :return:
     """
     temp_sub_mem = veh_table.values(mem)['sub_members'].copy()
@@ -343,6 +343,7 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     :param stand_alone:
     :param zone_stand_alone:
     :param ch_stays:
+    :param sub_mem_stays:
     :return:
     """
     if ch_stays is True:
@@ -356,7 +357,6 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     veh_table.values(sub_ch_id)['sub_members'].remove(sub_mem_id)
     net_graph.remove_edge(sub_mem_id, sub_ch_id)
     if 'bus' in ch_id:
-        # bus_table.values(ch_id)['cluster_members'].remove(sub_mem_id)
         bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
     else:
         # veh_table.values(ch_id)['cluster_members'].remove(sub_mem_id)
@@ -514,7 +514,7 @@ def det_near_ch(veh_id, veh_table, bus_table,
                                  veh_table.values(j)['trans_range']):
             if veh_table.values(j)['cluster_head'] is True:
                 ch_candidates.add(j)
-            elif veh_table.values(j)['primary_ch'] is not None:
+            elif (veh_table.values(j)['primary_ch'] is not None) and (veh_table.values(j)['secondary_ch'] is None):
                 sub_ch_candidates.add(j)
                 other_vehs.add(j)
             elif veh_table.values(j)['primary_ch'] is None:
