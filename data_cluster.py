@@ -574,18 +574,18 @@ class DataTable:
                     (veh_id in mem_control) or (veh_id in selected_chs):
                 continue
             if (n_near_sa[veh_id] == 1) and (list(near_sa[veh_id])[0] in near_sa.keys()):
-                if (n_near_sa[list(near_sa[veh_id])[0]]) == 1:
+                if n_near_sa[list(near_sa[veh_id])[0]] == 1:
                     veh_id_2 = list(near_sa[veh_id])[0]
 
                     (self.veh_table, self.all_chs, self.stand_alone,
                      self.zone_stand_alone, self.zone_ch) = util.set_ch(veh_id, self.veh_table, self.all_chs,
                                                                         self.stand_alone, self.zone_stand_alone,
-                                                                        self.zone_ch, configs, its_sas_clustering=True)
+                                                                        self.zone_ch, configs, its_sa_clustering=True)
 
                     (self.veh_table, self.all_chs, self.stand_alone,
                      self.zone_stand_alone, self.zone_ch) = util.set_ch(veh_id_2, self.veh_table, self.all_chs,
                                                                         self.stand_alone, self.zone_stand_alone,
-                                                                        self.zone_ch, configs, its_sas_clustering=True)
+                                                                        self.zone_ch, configs, its_sa_clustering=True)
 
                     self.veh_table.values(veh_id)['other_chs'].add(veh_id_2)
                     self.veh_table.values(veh_id_2)['other_chs'].add(veh_id)
@@ -601,7 +601,7 @@ class DataTable:
                 (self.veh_table, self.all_chs, self.stand_alone,
                  self.zone_stand_alone, self.zone_ch) = util.set_ch(ch, self.veh_table, self.all_chs,
                                                                     self.stand_alone, self.zone_stand_alone,
-                                                                    self.zone_ch, configs, its_sas_clustering=True)
+                                                                    self.zone_ch, configs, its_sa_clustering=True)
 
                 (self.bus_table, self.veh_table,
                  self.stand_alone, self.zone_stand_alone,
@@ -621,34 +621,40 @@ class DataTable:
         total_clusters = 0
         n_sav_ch = 0  # number of vehicles that are allways ch or stand-alone (never experiences being a cm)
         for i in self.veh_table.ids():
-            # The vehicle stays in area to the end of the iteration, the depart_time should get fixed
-            self.veh_table.values(i)['depart_time'] = self.veh_table.values(i)['arrive_time'] + configs.iter
-            length = self.veh_table.values(i)['cluster_record'].length
-            if (length == 1) and (self.veh_table.values(i)['cluster_record'].head.key is None):
+            total_length = self.veh_table.values(i)['cluster_record'].length
+            if (total_length == 1) and (self.veh_table.values(i)['cluster_record'].head.key is None):
                 n_sav_ch += 1
                 continue
             one_veh = 0
             temp = self.veh_table.values(i)['cluster_record'].head
+            actual_length = 0
+            summing = 0
             while temp:
                 if temp.value['timer'] is not None:
-                    summing = np.divide(temp.value['timer'], length)  # temp.length is acting like a penalty factor
+                    actual_length += 1
+                    summing += temp.value['timer']
                     one_veh += np.divide(summing, self.veh_table.values(i)['depart_time'] -
                                          self.veh_table.values(i)['arrive_time'])
                 temp = temp.next
+            one_veh = np.divide(one_veh, actual_length)     # temp.length is acting like a penalty factor
             total_clusters += one_veh
 
         for i in self.left_veh.keys():
-            length = self.left_veh[i]['cluster_record'].length
-            if (length == 1) and (self.left_veh[i]['cluster_record'].head.key is None):
+            total_length = self.left_veh[i]['cluster_record'].length
+            if (total_length == 1) and (self.left_veh[i]['cluster_record'].head.key is None):
                 n_sav_ch += 1
                 continue
             one_veh = 0
+            actual_length = 0
             temp = self.left_veh[i]['cluster_record'].head
+            summing = 0
             while temp:
                 if temp.value['timer'] is not None:
-                    summing = np.divide(temp.value['timer'], length)  # temp.length is acting like a penalty factor
+                    actual_length += 1
+                    summing += temp.value['timer']  # temp.length is acting like a penalty factor
                     one_veh += np.divide(summing, self.left_veh[i]['depart_time'] - self.left_veh[i]['arrive_time'])
                 temp = temp.next
+            one_veh = np.divide(one_veh, actual_length)  # temp.length is acting like a penalty factor
             total_clusters += one_veh
         return np.divide(total_clusters, np.add(len(self.veh_table.ids()), len(self.left_veh)) - n_sav_ch)
 

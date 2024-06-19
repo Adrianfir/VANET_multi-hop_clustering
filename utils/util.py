@@ -113,8 +113,8 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 mac=mac_address(),
                 counter=config.counter,  # a counter_time to search and join a cluster
                 start_ch_zone=None,  # This is the zone that vehicle starts becoming a ch
-                cluster_record=LinkedList(None, {'start_time': None, 'ef': None,
-                                                 'timer': None, 'interrupt': list()})  # the linked_list
+                cluster_record=LinkedList(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
+                                                 'ef': None,  'timer': None, 'interrupt': list()})  # the linked_list
                 # would record the clusters that this vehicle would join. key is the cluster_head which is None when the
                 # vehicle gets initialized, value['ef'] is the "ef" and value['timer] is the amount of time that this
                 # vehicle would remain in that cluster
@@ -148,12 +148,14 @@ def add_member(ch_id, bus_table,
 
     if ch_id == veh_table.values(veh_id)['priority_ch']:
         veh_table.values(veh_id)['cluster_record'].pop()
+        veh_table.values(veh_id)['cluster_record'].tail.value['secondary_ch'].append(None)
         veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
         veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
             config.priority_counter - veh_table.values(veh_id)['priority_counter'])
 
     else:
         veh_table.values(veh_id)['cluster_record'].tail.key = ch_id
+        veh_table.values(veh_id)['cluster_record'].tail.value['secondary_ch'].append(None)
         veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = sec
         veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
         veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
@@ -223,12 +225,14 @@ def add_sub_member(ch_id, bus_table,
 
     if ch_id == veh_table.values(veh_id)['priority_ch']:
         veh_table.values(veh_id)['cluster_record'].pop()
+        veh_table.values(veh_id)['cluster_record'].tail.value['secondary_ch'].append(sub_ch_id)
         veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
         veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'].append(
             config.priority_counter - veh_table.values(veh_id)['priority_counter'])
 
     else:
         veh_table.values(veh_id)['cluster_record'].tail.key = ch_id
+        veh_table.values(veh_id)['cluster_record'].tail.value['secondary_ch'].append(sub_ch_id)
         veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] = sec
         veh_table.values(veh_id)['cluster_record'].tail.value['ef'] = ef
         veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
@@ -320,9 +324,8 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     net_graph.remove_edge(ch_id, mem)
     veh_table.values(mem)['primary_ch'] = None
     veh_table.values(mem)['secondary_ch'] = None
-    veh_table.values(mem)['cluster_record'].append(None, {'start_time': None, 'ef': None,
-                                                          'timer': None,
-                                                          'interrupt': list()})
+    veh_table.values(mem)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
+                                                          'ef': None, 'timer': None, 'interrupt': list()})
 
     return (veh_table, bus_table, net_graph,
             stand_alone, zone_stand_alone)
@@ -364,17 +367,15 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     veh_table.values(sub_mem_id)['primary_ch'] = None
     veh_table.values(sub_mem_id)['secondary_ch'] = None
     veh_table.values(sub_mem_id)['cluster_record'].append(None,
-                                                          {'start_time': None,
-                                                           'ef': None,
-                                                           'timer': None,
-                                                           'interrupt': list()})
+                                                          {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
+                                                           'ef': None,  'timer': None, 'interrupt': list()})
 
     return (veh_table, bus_table, net_graph,
             stand_alone, zone_stand_alone)
 
 
 def set_ch(veh_id, veh_table, all_chs, stand_alone,
-           zone_stand_alone, zone_ch, config, its_sas_clustering=False):
+           zone_stand_alone, zone_ch, config, its_sa_clustering=False):
     """
     This function would update the information of a vehicle turning into a CH
     :param veh_id:
@@ -384,16 +385,18 @@ def set_ch(veh_id, veh_table, all_chs, stand_alone,
     :param zone_stand_alone:
     :param zone_ch:
     :param config:
+    :param its_sa_clustering:
     :return:
     """
     veh_table.values(veh_id)['cluster_head'] = True
+    veh_table.values(veh_id)['cluster_record'].tail.value['is_ch'] = True
     veh_table.values(veh_id)['start_ch_zone'] = veh_table.values(veh_id)['zone']
     all_chs.add(veh_id)
     zone_ch[veh_table.values(veh_id)['zone']].add(veh_id)
     veh_table.values(veh_id)['counter'] = config.counter
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
     veh_table.values(veh_id)['priority_ch'] = None
-    if its_sas_clustering is False:
+    if its_sa_clustering is False:
         stand_alone.remove(veh_id)
         zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
     else:
@@ -421,6 +424,8 @@ def set_ch_to_veh(veh_id, veh_table, zone_ch,
     """
     veh_table.values(veh_id)['cluster_members'] = set()
     veh_table.values(veh_id)['cluster_head'] = False
+    veh_table.values(veh_id)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
+                                                 'ef': None,  'timer': None, 'interrupt': list()})
     veh_table.values(veh_id)['start_ch_zone'] = None
     zone_ch[veh_table.values(veh_id)['zone']].remove(veh_id)
     all_chs.remove(veh_id)
