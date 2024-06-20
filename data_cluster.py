@@ -621,10 +621,14 @@ class DataTable:
         total_clusters = 0
         n_sav_ch = 0  # number of vehicles that are allways ch or stand-alone (never experiences being a cm)
         for i in self.veh_table.ids():
+            if self.veh_table.values(i)['depart_time'] is None:
+                self.veh_table.values(i)['depart_time'] = configs.start_time + configs.iter
             total_length = self.veh_table.values(i)['cluster_record'].length
-            if (total_length == 1) and (self.veh_table.values(i)['cluster_record'].head.key is None):
+            if (((total_length == 1) and (self.veh_table.values(i)['cluster_record'].head.key is None)) or
+                    (self.veh_table.values(i)['depart_time'] - self.veh_table.values(i)['arrive_time'] == 0)):
                 n_sav_ch += 1
                 continue
+
             one_veh = 0
             temp = self.veh_table.values(i)['cluster_record'].head
             actual_length = 0
