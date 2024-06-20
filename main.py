@@ -33,18 +33,10 @@ if __name__ == "__main__":
     # cluster.show_graph(configs)
     cluster.print_table()
     eval_cluster = cluster.eval_cluster(configs)
-    test = set()
-    for i in cluster.veh_table.ids():
-        print(f'the vehicle id is {i}')
-        cluster.veh_table.values(i)['cluster_record'].print_list()
-        print('\n\n')
-        if cluster.veh_table.values(i)['cluster_head'] is True:
-            test.add(i)
 
     print('evaluation: ', eval_cluster)
     print('\n')
     print('chs: ', cluster.all_chs)
     print('stand_alones: ', cluster.stand_alone)
     print("execution time: ", end_time - start_time)
-    print(test)
 

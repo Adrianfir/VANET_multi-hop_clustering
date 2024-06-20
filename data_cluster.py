@@ -623,24 +623,22 @@ class DataTable:
         for i in self.veh_table.ids():
             if self.veh_table.values(i)['depart_time'] is None:
                 self.veh_table.values(i)['depart_time'] = configs.start_time + configs.iter
+            in_area_time = self.veh_table.values(i)["depart_time"] - self.veh_table.values(i)["arrive_time"] + 1
             total_length = self.veh_table.values(i)['cluster_record'].length
-            if (((total_length == 1) and (self.veh_table.values(i)['cluster_record'].head.key is None)) or
-                    (self.veh_table.values(i)['depart_time'] - self.veh_table.values(i)['arrive_time'] == 0)):
+            if (total_length == 1) and (self.veh_table.values(i)['cluster_record'].head.value['timer'] is None):
                 n_sav_ch += 1
                 continue
+            if in_area_time == 0:
+                in_area_time += 1
 
             one_veh = 0
             temp = self.veh_table.values(i)['cluster_record'].head
-            actual_length = 0
             summing = 0
             while temp:
                 if temp.value['timer'] is not None:
-                    actual_length += 1
-                    summing += temp.value['timer']
-                    one_veh += np.divide(summing, self.veh_table.values(i)['depart_time'] -
-                                         self.veh_table.values(i)['arrive_time'])
+                    summing += temp.value['timer']  # temp.length acs as penalty
                 temp = temp.next
-            one_veh = np.divide(one_veh, actual_length)     # temp.length is acting like a penalty factor
+            one_veh += np.divide(summing, total_length*in_area_time)
             total_clusters += one_veh
 
         for i in self.left_veh.keys():
@@ -649,18 +647,16 @@ class DataTable:
                 n_sav_ch += 1
                 continue
             one_veh = 0
-            actual_length = 0
             temp = self.left_veh[i]['cluster_record'].head
             summing = 0
+            in_area_time = self.left_veh[i]['depart_time'] - self.left_veh[i]['arrive_time']
             while temp:
                 if temp.value['timer'] is not None:
-                    actual_length += 1
-                    summing += temp.value['timer']  # temp.length is acting like a penalty factor
-                    one_veh += np.divide(summing, self.left_veh[i]['depart_time'] - self.left_veh[i]['arrive_time'])
+                    summing += np.divide(temp.value['timer'], (total_length*in_area_time))  # temp.length acs as penalty
                 temp = temp.next
-            one_veh = np.divide(one_veh, actual_length)  # temp.length is acting like a penalty factor
+            one_veh += np.divide(summing, total_length * in_area_time)
             total_clusters += one_veh
-        return np.divide(total_clusters, np.add(len(self.veh_table.ids()), len(self.left_veh)) - n_sav_ch)
+        return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
 
     def show_graph(self, configs):
         """
