@@ -153,7 +153,7 @@ class DataTable:
         for k in (self.bus_table.ids() - bus_ids):
             temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
             for m in temp_cluster_members:
-                if m in self.veh_table.values(k)['cluster_members']:  # because m is might be removed
+                if m in self.bus_table.values(k)['cluster_members']:  # because m is might be removed
                     # from the cluster_members if it was a sum_member and its secondary_ch is already removed
                     # from the cluster:
 
