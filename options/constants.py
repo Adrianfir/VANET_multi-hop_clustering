@@ -31,13 +31,14 @@ class Inputs:
         alpha = 0.5
         trans_range = 200
         start_time = 1600
-        iter = 120
+        iter = 60
         counter = 4
-        priority_counter = 3
+        priority_counter = 1
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10
-        weights = np.array([0.7, 0, 0.3])       # direction's angle, speed, distance
+        weights_s = np.array([0.7, 0, 0.3])       # direction's angle, speed, distance for single-hop
+        weights_m = np.array([0.5, 0.0, 0.5])       # direction's angle, speed, distance for multi-hop
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,
@@ -72,7 +73,10 @@ class Inputs:
                             help='The specific center location of the map for saving images and make slide-show')
         parser.add_argument('--fps', type=float, default=fps, help='frame per second')
         parser.add_argument('--iter', type=int, default=iter, help='number of intervals to run')
-        parser.add_argument('--weights', type=numpy.ndarray, default=weights, help='weights used for clustering')
+        parser.add_argument('--weights_s', type=numpy.ndarray, default=weights_s, help='weights used for '
+                                                                                       'single-hop clustering')
+        parser.add_argument('--weights_m', type=numpy.ndarray, default=weights_m, help='weights used for '
+                                                                                       'multi-hop clustering')
         self.parser = parser
 
     def get_parser(self):

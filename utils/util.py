@@ -611,7 +611,7 @@ def choose_ch(table, veh_table_i, area_zones, candidates, config):
                                   max(np.abs(table.values(j)['speed']), veh_table_i['speed']) + 0.001)
 
         # Calculate the Eligibility Factor (EF) for candidates
-        weights = np.divide(config.weights, sum(config.weights))  # Normalize the weights
+        weights = np.divide(config.weights_s, sum(config.weights_s))  # Normalize the weights
         ef = np.matmul(np.transpose(weights), np.array([theta_sim, speed_sim, theta_dist]))
 
         if ef < min_ef:
@@ -674,7 +674,7 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
                                   max(np.abs(table.values(j)['speed']), veh_table.values(veh_id)['speed']))
 
         # calculate the Eligibility Factor (EF) for chs
-        weights = np.divide(config.weights, sum(config.weights))  # normalizing the weights
+        weights = np.divide(config.weights_m, sum(config.weights_m))  # normalizing the weights
         ef = np.matmul(np.transpose(weights),
                        np.array([theta_sim, speed_sim, theta_dist]))
         if ('veh' in j) and (table.values(j)['primary_ch'] is not None)\
