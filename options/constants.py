@@ -3,7 +3,6 @@ This .py file is for adding arguments to argparse
 """
 __author__: str = "Pouya 'Adrian' Firouzmakan"
 
-import numpy
 import numpy as np
 import argparse
 import pathlib
@@ -68,7 +67,7 @@ class Inputs:
                             help='The specific center location of the map for saving images and make slide-show')
         parser.add_argument('--fps', type=float, default=fps, help='frame per second')
         parser.add_argument('--iter', type=int, default=iter, help='number of intervals to run')
-        parser.add_argument('--weights', type=numpy.ndarray, default=weights, help='weights used for clustering')
+        parser.add_argument('--weights', type=np.ndarray, default=weights_s, help='weights used for clustering')
         self.parser = parser
 
     def get_parser(self):
