@@ -27,7 +27,7 @@ def be_ch():
 
 
 
-def calculate_etx(veh_id):
+def calculate_etx(m, n):
     return 1
 
 
@@ -80,12 +80,46 @@ def calculate_nfollow(veh_id, veh_table, bus_table,
     return len(fc) + len(d_neigh)
 
 
-def calculate_lltm():
-    lltm = 0
-    return lltm
+def calculate_llt(m, n, veh_table, bus_table):
+    if 'bus' in m:
+        table_m = bus_table
+    else:
+        table_m = veh_table
+    if 'bus' in n:
+        table_n = bus_table
+    else:
+        table_n = veh_table
 
+    delta_v_x = table_m.values(m)['prev_speed'] - table_n.values(n)['prev_speed']
+    delta_v_y = table_m.values(m)['speed'] - table_n.values(n)['speed']
 
-def calculate_pri():
-    pri = 0
+    delta_p_x = hs.haversine((table_m.values(m)["prev_lat"],
+                         table_m.values(m)["prev_long"]),
+                        (table_n.values(n)['prev_lat'],
+                         table_n.values(n)['prev_long']),
+                        unit=hs.Unit.METERS)
+
+    delta_p_y = hs.haversine((table_m.values(m)["lat"],
+                              table_m.values(m)["long"]),
+                             (table_n.values(n)['lat'],
+                              table_n.values(n)['long']),
+                             unit=hs.Unit.METERS)
+
+    d = min(table_m.values(m)['trans_range'], table_n.values(n)['trans_range'])
+
+    llt = ((np.sqrt(np.square(d)*(np.square(delta_v_x)+np.square(delta_v_y)) -
+                   np.square((delta_p_x*delta_v_y)-(delta_p_y*delta_v_x))) -
+             ((delta_p_x*delta_v_x)-(delta_p_y*delta_v_y))) / (np.square(delta_v_x)+np.square(delta_v_y)))
+    return llt
+
+def calculate_pri(m, n, veh_table, bus_table, zone_buses, zone_vehicle, weights):
+    alpha = weights[0]
+    beta= weights[1]
+    gama = weights[2]
+    first_part = alpha/calculate_nfollow(n, veh_table, bus_table,
+                      zone_buses, zone_vehicle)
+    second_part = beta*calculate_etx(m, n)
+    third_part = gama/calculate_llt(m, n, veh_table, bus_table)
+    pri = first_part + second_part + third_part
     return pri
 

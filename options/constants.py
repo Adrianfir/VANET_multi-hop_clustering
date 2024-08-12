@@ -40,6 +40,8 @@ class Inputs:
         weights_s = np.array([0.7, 0, 0.3])       # direction's angle, speed, distance for single-hop
         weights_m = np.array([0.5, 0.0, 0.5])       # direction's angle, speed, distance for multi-hop
 
+        weights_pcm = [1/3, 1/3, 1/3]
+
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,
                             help='this argument is the latitudes and longitudes of the understudied area')
@@ -77,6 +79,9 @@ class Inputs:
                                                                                        'single-hop clustering')
         parser.add_argument('--weights_m', type=numpy.ndarray, default=weights_m, help='weights used for '
                                                                                        'multi-hop clustering')
+        parser.add_argument('--weights_pcm', type=numpy.ndarray, default=weights_pcm, help='weights used for multi-hop'
+                                                                                           ' clustering using pcm '
+                                                                                           'algorithm')
         self.parser = parser
 
     def get_parser(self):
