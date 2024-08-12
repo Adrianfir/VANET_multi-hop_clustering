@@ -37,9 +37,12 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
     :return:a dictionary for initiating the new bus coming to the area
     """
     return dict(long=float(veh.getAttribute('x')),
+                prev_long=float(veh.getAttribute('x')),
                 lat=float(veh.getAttribute('y')),
+                prev_lat=float(veh.getAttribute('y')),
                 angle=float(veh.getAttribute('angle')),
                 speed=float(veh.getAttribute('speed')) + 0.01,
+                prev_speed = float(veh.getAttribute('speed')) + 0.01,
                 pos=float(veh.getAttribute('pos')),
                 lane={'id': veh.getAttribute('lane'), 'timer': 0},
                 zone=zone_id,
@@ -81,9 +84,12 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
             lane_id = match.group(1)
 
     return dict(long=float(veh.getAttribute('x')),
+                prev_long=float(veh.getAttribute('x')),
                 lat=float(veh.getAttribute('y')),
+                prev_lat=float(veh.getAttribute('y')),
                 angle=float(veh.getAttribute('angle')),
                 speed=float(veh.getAttribute('speed')) + 0.01,
+                prev_speed=float(veh.getAttribute('speed')) + 0.01,
                 sai=1,  # this feature is added for BeFit factor to make comparison
                 degree_n=0,  # this is the neighborhood degree for Befit factor to make comparison
                 pos=float(veh.getAttribute('pos')),
@@ -784,9 +790,12 @@ def update_bus_table(veh, bus_table, zone_id, understudied_area, zones, config, 
         else:
             bus_table.values(veh.getAttribute('id'))['lane']['id'] = veh.getAttribute('lane')
             bus_table.values(veh.getAttribute('id'))['lane']['timer'] = 0
+        bus_table.values(veh.getAttribute('id'))['prev_long'] = bus_table.values(veh.getAttribute('id'))['long']
+        bus_table.values(veh.getAttribute('id'))['prev_lat'] = bus_table.values(veh.getAttribute('id'))['lat']
         bus_table.values(veh.getAttribute('id'))['long'] = float(veh.getAttribute('x'))
         bus_table.values(veh.getAttribute('id'))['lat'] = float(veh.getAttribute('y'))
         bus_table.values(veh.getAttribute('id'))['angle'] = float(veh.getAttribute('angle'))
+        bus_table.values(veh.getAttribute('id'))['prev_speed'] = bus_table.values(veh.getAttribute('id'))['speed']
         bus_table.values(veh.getAttribute('id'))['speed'] = float(veh.getAttribute('speed')) + 0.01
         bus_table.values(veh.getAttribute('id'))['pos'] = float(veh.getAttribute('pos'))
         bus_table.values(veh.getAttribute('id'))['zone'] = zone_id
@@ -845,9 +854,12 @@ def update_veh_table(veh, veh_table, zone_id, understudied_area, zones, config,
             veh_table.values(veh.getAttribute('id'))['lane']['id'] = lane_id
             veh_table.values(veh.getAttribute('id'))['lane']['timer'] = 0
         veh_table.values(veh.getAttribute('id'))['sai'] = update_sai(veh_table, veh.getAttribute('id'))
+        veh_table.values(veh.getAttribute('id'))['prev_long'] = veh_table.values(veh.getAttribute('id'))['long']
+        veh_table.values(veh.getAttribute('id'))['prev_lat'] = veh_table.values(veh.getAttribute('id'))['lat']
         veh_table.values(veh.getAttribute('id'))['long'] = float(veh.getAttribute('x'))
         veh_table.values(veh.getAttribute('id'))['lat'] = float(veh.getAttribute('y'))
         veh_table.values(veh.getAttribute('id'))['angle'] = float(veh.getAttribute('angle'))
+        veh_table.values(veh.getAttribute('id'))['prev_speed'] = veh_table.values(veh.getAttribute('id'))['speed']
         veh_table.values(veh.getAttribute('id'))['speed'] = float(veh.getAttribute('speed')) + 0.01
         veh_table.values(veh.getAttribute('id'))['pos'] = float(veh.getAttribute('pos'))
         veh_table.values(veh.getAttribute('id'))['zone'] = zone_id
