@@ -16,6 +16,7 @@ import sys
 
 from graph import Graph
 import utils.util as util
+import utils.util_pmc as util_pmc
 import hash
 
 
@@ -412,14 +413,16 @@ class DataTable:
              sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
                                                                self.zone_buses, self.zone_vehicles)
 
-            if len(sub_ch_candidates) == 0:
-                self.single_hop(veh_id, config, zones,
-                                bus_candidates, ch_candidates, other_vehs)
-            else:
-                self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, sub_ch_candidates,
-                               other_vehs)
 
-            self.check_general_framework(veh_id)
+
+            # if len(sub_ch_candidates) == 0:
+            #     self.single_hop(veh_id, config, zones,
+            #                     bus_candidates, ch_candidates, other_vehs)
+            # else:
+            #     self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, sub_ch_candidates,
+            #                    other_vehs)
+            #
+            # self.check_general_framework(veh_id)
 
         # finding buses' other_chs
         for bus in self.bus_table.ids():
@@ -444,6 +447,38 @@ class DataTable:
                 for other_veh in self.veh_table.values(veh_id)['other_vehs']:
                     self.net_graph.add_edge(other_veh, veh_id)
 
+    def pcm(self, veh_id, config, zones, bus_candidates,
+                  ch_candidates, sub_ch_candidates, other_vehs):
+        if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
+                and (self.veh_table.values(veh_id)['priority_counter'] != 0)):
+            bus_candidates, ch_candidates, sub_ch_candidates = util.priority_clusters(veh_id, self.veh_table,
+                                                                                      bus_candidates, ch_candidates,
+                                                                                      sub_ch_candidates
+                                                                                      )
+        ch, ef = util_pcm.choose_ch(veh_id, self.veh_table, self.bus_table, bus_candidates,
+                                         ch_candidates, sub_ch_candidates, zones, config)
+
+        if (('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True)) or ('bus' in ch):
+            (self.bus_table, self.veh_table,
+             self.stand_alone, self.zone_stand_alone,
+             self.net_graph) = util.add_member(ch, self.bus_table, veh_id, self.veh_table,
+                                               config, ef, self.time, bus_candidates,
+                                               ch_candidates, self.stand_alone,
+                                               self.zone_stand_alone, self.net_graph,
+                                               other_vehs)
+
+        if ('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is False):
+            sub_ch = ch
+            veh_ch = self.veh_table.values(sub_ch)['primary_ch']
+
+            (self.bus_table, self.veh_table,
+             self.stand_alone, self.zone_stand_alone,
+             self.net_graph) = util.add_sub_member(veh_ch, self.bus_table, veh_id, sub_ch, self.veh_table,
+                                                   config, ef, self.time, bus_candidates,
+                                                   ch_candidates, self.stand_alone,
+                                                   self.zone_stand_alone, self.net_graph,
+                                                   other_vehs)
+        self.check_general_framework(veh_id)
     def single_hop(self, veh_id, config, zones,
                    bus_candidates, ch_candidates, other_vehs):
         prior_bus_candidates = set()

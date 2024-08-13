@@ -23,10 +23,6 @@ import re
 import utils.util as util
 
 
-def be_ch():
-
-
-
 def calculate_etx(m, n):
     return 1
 
@@ -112,9 +108,10 @@ def calculate_llt(m, n, veh_table, bus_table):
              ((delta_p_x*delta_v_x)-(delta_p_y*delta_v_y))) / (np.square(delta_v_x)+np.square(delta_v_y)))
     return llt
 
+
 def calculate_pri(m, n, veh_table, bus_table, zone_buses, zone_vehicle, weights):
     alpha = weights[0]
-    beta= weights[1]
+    beta = weights[1]
     gama = weights[2]
     first_part = alpha/calculate_nfollow(n, veh_table, bus_table,
                       zone_buses, zone_vehicle)
@@ -122,4 +119,13 @@ def calculate_pri(m, n, veh_table, bus_table, zone_buses, zone_vehicle, weights)
     third_part = gama/calculate_llt(m, n, veh_table, bus_table)
     pri = first_part + second_part + third_part
     return pri
+
+
+def choose_ch(veh_id, veh_table, bus_table, all_vehs):
+    ch = None
+    for i in all_vehs:
+        if 'bus' in i:
+            table_i = bus_table
+        else:
+            table_i = veh_table
 

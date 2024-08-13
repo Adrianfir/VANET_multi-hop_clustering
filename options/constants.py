@@ -32,8 +32,8 @@ class Inputs:
         trans_range = 200
         start_time = 1600
         iter = 60
-        counter = 4
-        priority_counter = 1
+        counter = 100
+        priority_counter = 100
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 10
