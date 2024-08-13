@@ -413,16 +413,10 @@ class DataTable:
              sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
                                                                self.zone_buses, self.zone_vehicles)
 
+            self.pcm(self, veh_id, config, zones, bus_candidates,
+                ch_candidates, sub_ch_candidates, other_vehs)
 
-
-            # if len(sub_ch_candidates) == 0:
-            #     self.single_hop(veh_id, config, zones,
-            #                     bus_candidates, ch_candidates, other_vehs)
-            # else:
-            #     self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, sub_ch_candidates,
-            #                    other_vehs)
-            #
-            # self.check_general_framework(veh_id)
+            self.check_general_framework(veh_id)
 
         # finding buses' other_chs
         for bus in self.bus_table.ids():
