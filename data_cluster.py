@@ -449,14 +449,10 @@ class DataTable:
 
     def pcm(self, veh_id, config, zones, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
-        if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
-                and (self.veh_table.values(veh_id)['priority_counter'] != 0)):
-            bus_candidates, ch_candidates, sub_ch_candidates = util.priority_clusters(veh_id, self.veh_table,
-                                                                                      bus_candidates, ch_candidates,
-                                                                                      sub_ch_candidates
-                                                                                      )
-        ch, ef = util_pcm.choose_ch(veh_id, self.veh_table, self.bus_table, bus_candidates,
-                                         ch_candidates, sub_ch_candidates, zones, config)
+
+        all_vehs = bus_candidates + ch_candidates + sub_ch_candidates + other_vehs
+        ch, ef = util_pmc.choose_ch(veh_id, self.veh_table, self.bus_table, all_vehs,
+                                    self.zone_buses, self.zone_vehicles, config.weights_pcm)
 
         if (('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True)) or ('bus' in ch):
             (self.bus_table, self.veh_table,
@@ -479,6 +475,7 @@ class DataTable:
                                                    self.zone_stand_alone, self.net_graph,
                                                    other_vehs)
         self.check_general_framework(veh_id)
+
     def single_hop(self, veh_id, config, zones,
                    bus_candidates, ch_candidates, other_vehs):
         prior_bus_candidates = set()
