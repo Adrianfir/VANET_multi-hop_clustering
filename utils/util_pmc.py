@@ -16,11 +16,11 @@ def calculate_etx(m, n):
     return 1
 
 
-def calculate_nfollow(veh_id, all_vehs, veh_table, bus_table,
-                      zone_buses, zone_vehicle):
+def calculate_nfollow(n, veh_table, bus_table,
+                      zone_buses, zone_vehicles):
     """
     this function would calculate the N_follow in the comparison paper
-    :param veh_id:
+    :param n:
     :param veh_table:
     :param bus_table:
     :param zone_buses:
@@ -32,30 +32,41 @@ def calculate_nfollow(veh_id, all_vehs, veh_table, bus_table,
     d_neigh = set()
     fc = set()
 
-    if 'bus' in veh_id:
+    if 'bus' in n:
         table = bus_table
     else:
         table = veh_table
+    (bus_candidates, ch_candidates,
+     sub_ch_candidates, other_vehs) = util.det_near_ch(n, veh_table, bus_table,
+                                                       zone_buses, zone_vehicles)
+    all_vehs = set()
+    all_vehs = all_vehs.union(all_vehs, bus_candidates,
+                              ch_candidates, sub_ch_candidates, other_vehs)
+
+    try:
+        all_vehs.remove(n)
+    except KeyError:
+        pass
 
     for i in all_vehs:
         connects = set()
+
         if 'bus' in i:
-            if table.values(veh_id)['lane']['id'] == bus_table.values(i)['lane']['id']:
+            if table.values(n)['lane']['id'] == bus_table.values(i)['lane']['id']:
                 d_neigh.add(i)
-            connects.union(connects, bus_table.values(veh_id)['other_chs'],
-                           bus_table.values(veh_id)['cluster_members'],
-                           bus_table.values(veh_id)['sub_cluster_members'])
+            connects.union(connects, bus_table.values(i)['other_chs'],
+                           bus_table.values(i)['cluster_members'], {i})
         else:
-            if table.values(veh_id)['lane']['id'] == veh_table.values(i)['lane']['id']:
+            if table.values(n)['lane']['id'] == veh_table.values(i)['lane']['id']:
                 d_neigh.add(i)
-            connects.union(connects, veh_table.values(veh_id)['other_chs'],
-                           veh_table.values(veh_id)['cluster_members'],
-                           veh_table.values(veh_id)['sub_cluster_members'])
+
+            connects.union(connects, veh_table.values(i)['other_chs'],
+                           veh_table.values(i)['cluster_members'], {i})
 
             if veh_table.values(i)['primary_ch'] is not None and veh_table.values(i)['secondary_ch'] is None:
-                connects.union(veh_table.values['primary_ch'])
+                connects.union(connects, {veh_table.values(i)['primary_ch']})
             elif veh_table.values(i)['primary_ch'] is None and veh_table.values(i)['secondary_ch'] is not None:
-                connects.union(veh_table.values['secondary_ch'])
+                connects.union(connects, {veh_table.values['secondary_ch']})
         fc = fc.union(fc, connects)
 
     len(fc) + len(d_neigh)
@@ -95,11 +106,11 @@ def calculate_llt(m, n, veh_table, bus_table):
     return llt
 
 
-def calculate_pri(m, n, all_vehs, veh_table, bus_table, zone_buses, zone_vehicle, weights):
+def calculate_pri(m, n, veh_table, bus_table, zone_buses, zone_vehicle, weights):
     alpha = weights[0]
     beta = weights[1]
     gama = weights[2]
-    first_part = alpha / calculate_nfollow(n, all_vehs, veh_table, bus_table,
+    first_part = alpha / calculate_nfollow(n, veh_table, bus_table,
                                            zone_buses, zone_vehicle)
     second_part = beta * calculate_etx(m, n)
     third_part = gama / calculate_llt(m, n, veh_table, bus_table)
@@ -113,7 +124,7 @@ def choose_ch(veh_id, veh_table, bus_table, all_vehs, zone_buses, zone_vehicle, 
     ef = pri
     for i in all_vehs:
         if 'bus' in i:
-            temp_pri = calculate_pri(veh_id, i, all_vehs, veh_table, bus_table, zone_buses, zone_vehicle, weights)
+            temp_pri = calculate_pri(veh_id, i, veh_table, bus_table, zone_buses, zone_vehicle, weights)
             if temp_pri < pri:
                 ch = i
                 ef = temp_pri

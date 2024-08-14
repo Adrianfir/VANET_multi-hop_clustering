@@ -451,7 +451,7 @@ class DataTable:
         all_vehs = all_vehs.union( bus_candidates, ch_candidates, sub_ch_candidates)
         ch, ef = util_pmc.choose_ch(veh_id, self.veh_table, self.bus_table, all_vehs,
                                     self.zone_buses, self.zone_vehicles, config.weights_pcm)
-        print(all_vehs, ch)
+        print(veh_id, all_vehs, ch, ef)
         if (('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True)) or ('bus' in ch):
             (self.bus_table, self.veh_table,
              self.stand_alone, self.zone_stand_alone,
