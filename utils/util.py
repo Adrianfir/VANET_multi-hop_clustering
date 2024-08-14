@@ -110,8 +110,7 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 priority_counter=config.priority_counter,
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),  # This will be a Graph if the vehicle is a ch
-                sub_cluster_members=set(),
-                sub_members=set(),  # cluster members connected to claster through this vehicle would be in this set
+                sub_cluster_members=set(),  # cluster members connected to claster through this vehicle would be in this set
                 gates=dict(),
                 gate_chs=set(),
                 other_vehs=set(),
@@ -167,7 +166,7 @@ def add_member(ch_id, bus_table,
         veh_table.values(veh_id)['cluster_record'].tail.value['timer'] = 1
         veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
 
-    veh_table.values(veh_id)['sub_members'] = set()
+    veh_table.values(veh_id)['sub_cluster_members'] = set()
     veh_table.values(veh_id)['counter'] = config.counter
     veh_table.values(veh_id)['priority_ch'] = ch_id
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
@@ -248,7 +247,7 @@ def add_sub_member(ch_id, bus_table,
     veh_table.values(veh_id)['priority_ch'] = ch_id
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
     veh_table.values(veh_id)['counter'] = config.counter
-    veh_table.values(sub_ch_id)['sub_members'].add(veh_id)
+    veh_table.values(sub_ch_id)['sub_cluster_members'].add(veh_id)
 
     if 'bus' not in ch_id:
         if ch_id in ch_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
@@ -309,7 +308,7 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     :param mem_stays:
     :return:
     """
-    temp_sub_mem = veh_table.values(mem)['sub_members'].copy()
+    temp_sub_mem = veh_table.values(mem)['sub_cluster_members'].copy()
     for s_m in temp_sub_mem:
         (veh_table, bus_table, net_graph,
          stand_alone, zone_stand_alone) = remove_sub_member(s_m, mem, ch_id, veh_table, bus_table, config,
@@ -363,7 +362,7 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     if sub_mem_stays is True:
         stand_alone.add(sub_mem_id)
         zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
-    veh_table.values(sub_ch_id)['sub_members'].remove(sub_mem_id)
+    veh_table.values(sub_ch_id)['sub_cluster_members'].remove(sub_mem_id)
     net_graph.remove_edge(sub_mem_id, sub_ch_id)
     if 'bus' in ch_id:
         bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
