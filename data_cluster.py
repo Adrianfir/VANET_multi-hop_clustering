@@ -400,23 +400,16 @@ class DataTable:
                 else:
                     continue
                     # now the updates related to sub_cluster_members should be applied
-            self.check_general_framework(veh_id)
-        temp_stand_alone = self.stand_alone.copy()
-        for veh_id in temp_stand_alone:
-            self.veh_table.values(veh_id)['other_chs'] = set()
-            self.veh_table.values(veh_id)['gates'] = dict()
-            self.veh_table.values(veh_id)['gate_chs'] = set()
-            self.veh_table.values(veh_id)['other_vehs'] = set()
 
-            # determining the buses and cluster_head in neighbor zones
-            (bus_candidates, ch_candidates,
-             sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
-                                                               self.zone_buses, self.zone_vehicles)
+            elif ((len(bus_candidates) + len(ch_candidates) + len(sub_ch_candidates) != 0) and
+                    (self.veh_table.values(veh_id)['in_area'] is True) and
+                    (self.veh_table.values(veh_id)['primary_ch'] is None) and
+                    (self.veh_table.values(veh_id)['cluster_head'] is False)):
 
-            self.pcm(self, veh_id, config, zones, bus_candidates,
-                ch_candidates, sub_ch_candidates, other_vehs)
+                self.pmc(veh_id, config, bus_candidates,
+                            ch_candidates, sub_ch_candidates, other_vehs)
 
-            self.check_general_framework(veh_id)
+                self.check_general_framework(veh_id)
 
         # finding buses' other_chs
         for bus in self.bus_table.ids():
@@ -441,112 +434,14 @@ class DataTable:
                 for other_veh in self.veh_table.values(veh_id)['other_vehs']:
                     self.net_graph.add_edge(other_veh, veh_id)
 
-    def pcm(self, veh_id, config, zones, bus_candidates,
+    def pmc(self, veh_id, config, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
 
-        all_vehs = bus_candidates + ch_candidates + sub_ch_candidates + other_vehs
+        all_vehs = set()
+        all_vehs = all_vehs.union( bus_candidates, ch_candidates, sub_ch_candidates)
         ch, ef = util_pmc.choose_ch(veh_id, self.veh_table, self.bus_table, all_vehs,
                                     self.zone_buses, self.zone_vehicles, config.weights_pcm)
-
-        if (('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True)) or ('bus' in ch):
-            (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(ch, self.bus_table, veh_id, self.veh_table,
-                                               config, ef, self.time, bus_candidates,
-                                               ch_candidates, self.stand_alone,
-                                               self.zone_stand_alone, self.net_graph,
-                                               other_vehs)
-
-        if ('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is False):
-            sub_ch = ch
-            veh_ch = self.veh_table.values(sub_ch)['primary_ch']
-
-            (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_sub_member(veh_ch, self.bus_table, veh_id, sub_ch, self.veh_table,
-                                                   config, ef, self.time, bus_candidates,
-                                                   ch_candidates, self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph,
-                                                   other_vehs)
-        self.check_general_framework(veh_id)
-
-    def single_hop(self, veh_id, config, zones,
-                   bus_candidates, ch_candidates, other_vehs):
-        prior_bus_candidates = set()
-        prior_ch_candidates = set()
-
-        if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
-                and (self.veh_table.values(veh_id)['priority_counter'] != 0)):
-            # Here, in single_hop the sub_ch_candidates would be empty
-            # print(f'b_cand: {bus_candidates}, v_cand: {ch_candidates}')
-            prior_bus_candidates, prior_ch_candidates, prior_sub_ch_candidates = util.priority_clusters(veh_id,
-                                                                                                        self.veh_table,
-                                                                                                        bus_candidates,
-                                                                                                        ch_candidates,
-                                                                                                        set())
-        if len(prior_bus_candidates) + len(prior_ch_candidates) != 0:
-            # to calculate ef for the bus which is the priority_ch
-            if len(prior_ch_candidates) == 0:
-                bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
-                                            prior_bus_candidates, config)
-                (self.bus_table, self.veh_table,
-                 self.stand_alone, self.zone_stand_alone,
-                 self.net_graph) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
-                                                   config, ef, self.time, bus_candidates,
-                                                   ch_candidates, self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph,
-                                                   other_vehs)
-            elif len(prior_bus_candidates) == 0:
-                veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
-                                            prior_ch_candidates, config)
-                (self.bus_table, self.veh_table,
-                 self.stand_alone, self.zone_stand_alone,
-                 self.net_graph) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
-                                                   config, ef, self.time, bus_candidates,
-                                                   ch_candidates, self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph,
-                                                   other_vehs)
-
-        elif (len(bus_candidates) > 0) and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0):
-
-            bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
-                                        bus_candidates, config)  # determine the best from bus_candidates
-
-            (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
-                                               config, ef, self.time, bus_candidates,
-                                               ch_candidates, self.stand_alone,
-                                               self.zone_stand_alone, self.net_graph,
-                                               other_vehs)
-
-        elif ((len(bus_candidates) == 0) and (len(ch_candidates) > 0)
-              and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0)):
-
-            veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
-                                        zones, ch_candidates, config)  # determine the best from vehicles
-
-            (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
-                                               config, ef, self.time, bus_candidates,
-                                               ch_candidates, self.stand_alone,
-                                               self.zone_stand_alone, self.net_graph,
-                                               other_vehs)
-
-        self.check_general_framework(veh_id)
-
-    def multi_hop(self, veh_id, config, zones, bus_candidates,
-                  ch_candidates, sub_ch_candidates, other_vehs):
-        if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
-                and (self.veh_table.values(veh_id)['priority_counter'] != 0)):
-            bus_candidates, ch_candidates, sub_ch_candidates = util.priority_clusters(veh_id, self.veh_table,
-                                                                                      bus_candidates, ch_candidates,
-                                                                                      sub_ch_candidates
-                                                                                      )
-        ch, ef = util.choose_multihop_ch(veh_id, self.veh_table, self.bus_table, bus_candidates,
-                                         ch_candidates, sub_ch_candidates, zones, config)
-
+        print(all_vehs, ch)
         if (('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True)) or ('bus' in ch):
             (self.bus_table, self.veh_table,
              self.stand_alone, self.zone_stand_alone,
