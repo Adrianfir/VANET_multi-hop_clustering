@@ -127,10 +127,10 @@ def choose_ch(veh_id, veh_table, bus_table, all_vehs, zone_buses, zone_vehicle, 
               (
                       (veh_table.values(i)['cluster_head'] is True) or
                       ((veh_table.values(i)['primary_ch'] is not None) and
-                       (veh_table.values(i)['secondary_ch'] is not None))
+                       (veh_table.values(i)['secondary_ch'] is None))
               )
               ):
-            temp_pri = calculate_pri(veh_id, i, all_vehs, veh_table, bus_table, zone_buses, zone_vehicle, weights)
+            temp_pri = calculate_pri(veh_id, i, veh_table, bus_table, zone_buses, zone_vehicle, weights)
             if temp_pri < pri:
                 ch = i
                 ef = temp_pri
