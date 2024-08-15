@@ -491,57 +491,7 @@ class DataTable:
             else:
                 continue
 
-        unique_pot_ch = set(pot_ch.values())
-        selected_chs = set()
-        mem_control = set()  # after a vehicle become a member, add it to this and at the beginning of the
-        # for-loop, check if veh_id is in it to not do anything new and ruin it
-        temp = self.stand_alone.copy()
-        temp = list(temp)
-        temp.sort()
-        temp.reverse()
-        for veh_id in temp:
-            if (self.veh_table.values(veh_id)['cluster_head'] is True) or \
-                    (self.veh_table.values(veh_id)['primary_ch'] is not None) or \
-                    (veh_id in mem_control) or (veh_id in selected_chs):
-                continue
-            if (n_near_sa[veh_id] == 1) and (list(near_sa[veh_id])[0] in near_sa.keys()):
-                if n_near_sa[list(near_sa[veh_id])[0]] == 1:
-                    veh_id_2 = list(near_sa[veh_id])[0]
-
-                    (self.veh_table, self.all_chs, self.stand_alone,
-                     self.zone_stand_alone, self.zone_ch) = util.set_ch(veh_id, self.veh_table, self.all_chs,
-                                                                        self.stand_alone, self.zone_stand_alone,
-                                                                        self.zone_ch, configs, its_sa_clustering=True)
-
-                    (self.veh_table, self.all_chs, self.stand_alone,
-                     self.zone_stand_alone, self.zone_ch) = util.set_ch(veh_id_2, self.veh_table, self.all_chs,
-                                                                        self.stand_alone, self.zone_stand_alone,
-                                                                        self.zone_ch, configs, its_sa_clustering=True)
-
-                    self.veh_table.values(veh_id)['other_chs'].add(veh_id_2)
-                    self.veh_table.values(veh_id_2)['other_chs'].add(veh_id)
-                    self.net_graph.add_edge(veh_id, veh_id_2)
-                    selected_chs.add(veh_id)
-                    selected_chs.add(veh_id_2)
-                    continue
-
-            if len(unique_pot_ch.intersection(near_sa[veh_id]) - mem_control) > 0:
-                ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
-                                        unique_pot_ch.intersection(near_sa[veh_id]) - mem_control, configs)
-                selected_chs.add(ch)
-                (self.veh_table, self.all_chs, self.stand_alone,
-                 self.zone_stand_alone, self.zone_ch) = util.set_ch(ch, self.veh_table, self.all_chs,
-                                                                    self.stand_alone, self.zone_stand_alone,
-                                                                    self.zone_ch, configs, its_sa_clustering=True)
-
-                (self.bus_table, self.veh_table,
-                 self.stand_alone, self.zone_stand_alone,
-                 self.net_graph) = util.add_member(ch, self.bus_table, veh_id, self.veh_table,
-                                                   configs, ef, self.time, set(), set(), self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph, set())
-
-                mem_control.add(veh_id)
-
+        
         # Determining the updating self.veh_tale and self.net_graph
         for k in near_sa.keys():
             self.veh_table, self.net_graph = util.update_sa_net_graph(self.veh_table, k, near_sa, self.net_graph)
