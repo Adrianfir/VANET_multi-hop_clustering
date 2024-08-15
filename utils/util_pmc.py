@@ -59,14 +59,9 @@ def calculate_nfollow(n, veh_table, bus_table,
         else:
             if table.values(n)['lane']['id'] == veh_table.values(i)['lane']['id']:
                 d_neigh.add(i)
+            connects.union(connects, veh_table.values(i)['cluster_members'],
+                           veh_table.values(i)['sub_cluster_members'])
 
-            connects.union(connects, veh_table.values(i)['other_chs'],
-                           veh_table.values(i)['cluster_members'], {i})
-
-            if veh_table.values(i)['primary_ch'] is not None and veh_table.values(i)['secondary_ch'] is None:
-                connects.union(connects, {veh_table.values(i)['primary_ch']})
-            elif veh_table.values(i)['primary_ch'] is None and veh_table.values(i)['secondary_ch'] is not None:
-                connects.union(connects, {veh_table.values['secondary_ch']})
         fc = fc.union(fc, connects)
 
     len(fc) + len(d_neigh)
@@ -110,10 +105,10 @@ def calculate_pri(m, n, veh_table, bus_table, zone_buses, zone_vehicle, weights)
     alpha = weights[0]
     beta = weights[1]
     gama = weights[2]
-    first_part = alpha / calculate_nfollow(n, veh_table, bus_table,
-                                           zone_buses, zone_vehicle)
+    first_part = alpha/(calculate_nfollow(n, veh_table, bus_table,
+                                           zone_buses, zone_vehicle) + 0.0001)
     second_part = beta * calculate_etx(m, n)
-    third_part = gama / calculate_llt(m, n, veh_table, bus_table)
+    third_part = gama/(calculate_llt(m, n, veh_table, bus_table) + 0.0001)
     pri = first_part + second_part + third_part
     return pri
 

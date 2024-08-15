@@ -448,7 +448,7 @@ class DataTable:
                   ch_candidates, sub_ch_candidates, other_vehs):
 
         all_vehs = set()
-        all_vehs = all_vehs.union( bus_candidates, ch_candidates, sub_ch_candidates)
+        all_vehs = all_vehs.union(bus_candidates, ch_candidates, sub_ch_candidates)
         ch, ef = util_pmc.choose_ch(veh_id, self.veh_table, self.bus_table, all_vehs,
                                     self.zone_buses, self.zone_vehicles, config.weights_pcm)
         print(veh_id, all_vehs, ch, ef)
