@@ -904,6 +904,7 @@ def det_near_sa(veh_id, veh_table,
     """
     result = set()
     neigh_stand_alones = []
+    speed_rel = list()
     for neigh_z in veh_table.values(veh_id)['neighbor_zones']:
         neigh_stand_alones += zone_stand_alone[neigh_z]  # adding all the SAVs in the neighbor zones to a list
 
@@ -913,9 +914,10 @@ def det_near_sa(veh_id, veh_table,
 
             if euclidian_dist <= min(veh_table.values(veh_id)['trans_range'],
                                      veh_table.values(j)['trans_range']):
-                result.add(j)
+                speed_rel.append(abs(veh_table.values(veh_id)['speed'] - veh_table.values(j)['speed']))
+                result.add([j])
 
-    return result
+    return np.array(speed_rel).mean(), result
 
 
 def det_befit(veh_table, veh_id,

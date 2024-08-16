@@ -8,6 +8,7 @@ understudied area and creating and updating the clusters using recursion.
 __author__: str = "Pouya 'Adrian' Firouzmakan"
 
 import numpy as np
+import pandas as pd
 import networkx as nx
 import folium
 from folium.plugins import MarkerCluster
@@ -476,20 +477,28 @@ class DataTable:
 
     def stand_alones_cluster(self, configs, zones):
         near_sa = dict()
-        n_near_sa = dict()
-        pot_ch = dict()
+        speed_rel = dict()
+        data = dict()
+        data['veh_id'] = list()
+        data['n_near_sa'] = list()
+        data['speed_rel'] = list()
         for veh_id in self.stand_alone:
             # self.stand_alone_test(veh_id)
-            near_sa[veh_id] = util.det_near_sa(veh_id, self.veh_table,
+            near_sa[veh_id], speed_rel[veh_id] = util.det_near_sa(veh_id, self.veh_table,
                                                self.stand_alone, self.zone_stand_alone
                                                )
-            n_near_sa[veh_id] = len(near_sa[veh_id])
+            data['veh_id'].append(veh_id)
+            data['speed_rel'].append(speed_rel[veh_id])
+            data['n_near_sa'].append(len(near_sa[veh_id]))
 
-        for veh_id in near_sa.keys():
-            if n_near_sa[veh_id] > 0:
-                pot_ch[veh_id] = util.det_pot_ch(veh_id, near_sa, n_near_sa)
-            else:
-                continue
+        df = pd.dataframe(data=data)
+        n_to_be_ch = int(np.ceil(df.shape[0]/5))
+        df = df.sort_values(['n_near_sa', 'speed_rel'], ascending=[False, True])
+        new_chs = df.head(n_to_be_ch)['veh_id']
+
+        for id in new_chs:
+            util.set_ch(id, self.veh_table, self.all_chs, self.stand_alone,
+           self.zone_stand_alone, self.zone_ch, configs, its_sa_clustering=True)
 
         
         # Determining the updating self.veh_tale and self.net_graph
