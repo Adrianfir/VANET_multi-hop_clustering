@@ -484,14 +484,14 @@ class DataTable:
         data['speed_rel'] = list()
         for veh_id in self.stand_alone:
             # self.stand_alone_test(veh_id)
-            near_sa[veh_id], speed_rel[veh_id] = util.det_near_sa(veh_id, self.veh_table,
+            speed_rel[veh_id], near_sa[veh_id] = util.det_near_sa(veh_id, self.veh_table,
                                                self.stand_alone, self.zone_stand_alone
                                                )
             data['veh_id'].append(veh_id)
             data['speed_rel'].append(speed_rel[veh_id])
             data['n_near_sa'].append(len(near_sa[veh_id]))
 
-        df = pd.dataframe(data=data)
+        df = pd.DataFrame(data=data)
         n_to_be_ch = int(np.ceil(df.shape[0]/5))
         df = df.sort_values(['n_near_sa', 'speed_rel'], ascending=[False, True])
         new_chs = df.head(n_to_be_ch)['veh_id']

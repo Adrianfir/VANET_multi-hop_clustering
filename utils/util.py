@@ -915,7 +915,7 @@ def det_near_sa(veh_id, veh_table,
             if euclidian_dist <= min(veh_table.values(veh_id)['trans_range'],
                                      veh_table.values(j)['trans_range']):
                 speed_rel.append(abs(veh_table.values(veh_id)['speed'] - veh_table.values(j)['speed']))
-                result.add([j])
+                result.add(j)
 
     return np.array(speed_rel).mean(), result
 
