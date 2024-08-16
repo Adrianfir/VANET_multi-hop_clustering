@@ -31,7 +31,7 @@ class Inputs:
         alpha = 0.8
         trans_range = 400
         start_time = 1600
-        iter = 60
+        iter = 300
         counter = 100
         priority_counter = 100
         map_zoom = 15.3
