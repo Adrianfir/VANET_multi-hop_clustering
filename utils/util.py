@@ -21,6 +21,7 @@ from PIL import Image
 from io import BytesIO
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 import os
 import cv2
 import re
@@ -48,7 +49,7 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
                 depart_time=None,
-                trans_range=config.trans_range,
+                trans_range=config.bus_trans_range,
                 message_dest={},
                 message_source={},
                 cluster_head=True,
@@ -94,7 +95,7 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
                 depart_time=None,
-                trans_range=config.trans_range,
+                trans_range=config.veh_trans_range,
                 message_dest={},
                 message_source={},
                 cluster_head=False,  # if the vehicle is a ch, it will be True
@@ -1054,29 +1055,32 @@ def det_pot_ch_dsca(veh_id, near_sa, n_near_sa, sf_factor):
 
 def save_img(m, zoom_out_value, name):
     """
-    :param name: name of the image
-    :param zoom_out_value: zoom amount
-    :param m: the map
-    :return: an image will be saved to the directory path
+    Saves a screenshot of a map to an image file.
+
+    :param m: The map object to save as an image.
+    :param zoom_out_value: The amount to zoom out on the map.
+    :param name: The name of the image file to save.
     """
     # Save the map as an HTML file
-    map_file = "map.html"
+    map_file = "/Users/pouyafirouzmakan/Desktop/slideshow/map.html"
     m.save(map_file)
 
-    # Set up the options for the webdriver
+    # Setup the Firefox WebDriver with headless option
+    service = Service(executable_path='/usr/local/bin/geckodriver')
     options = Options()
-    options.headless = True  # Run the browser in headless mode (without opening a visible window)
+    options.headless = True
 
     # Initialize the Firefox webdriver
-    driver = webdriver.Firefox(options=options)
+    driver = webdriver.Firefox(service=service, options=options)
 
-    # Open the map HTML file
-    driver.get('file:/Users/pouyafirouzmakan/Desktop/VANET/graph_map.html')
+    # Open the map HTML file using the correct file URL format
+    driver.get(f'file://{map_file}')
 
-    # change the zoom
+    # Change the zoom level of the map using JavaScript
     script = f"document.getElementsByClassName('leaflet-control')[0].style.transform = 'scale({1 / zoom_out_value})';"
     driver.execute_script(script)
-    # Wait for the map to load (you can adjust the waiting time if needed)
+
+    # Wait for the map to load
     time.sleep(1)
 
     # Take a screenshot of the entire webpage (including the map)
@@ -1084,14 +1088,13 @@ def save_img(m, zoom_out_value, name):
 
     # Save the screenshot as an image file with good resolution
     img = Image.open(BytesIO(screenshot))
-    img.save(name + '.png', 'PNG', quality=800)
+    img.save(name + '.png', 'PNG', quality=95)
 
     # Close the Firefox window and quit the webdriver instance
     driver.quit()
 
     # Delete the temporary HTML file
     os.remove(map_file)
-
 
 def image_num(filename):
     """
