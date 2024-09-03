@@ -62,3 +62,17 @@ class Graph:
             del self.adj_list[vertex]
             return True
         return False
+
+    def print_all_edges(self):
+        """
+        Prints all unique edges in the graph.
+        """
+        edges = set()  # Use a set to avoid duplicate edges
+        for vertex in self.adj_list:
+            for neighbor in self.adj_list[vertex]['edges']:
+                if (neighbor, vertex) not in edges:  # Avoid printing both (v1, v2) and (v2, v1)
+                    edges.add((vertex, neighbor))
+
+        print("All edges in the graph:")
+        for edge in edges:
+            print(edge)

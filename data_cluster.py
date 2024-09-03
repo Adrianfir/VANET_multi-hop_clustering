@@ -366,7 +366,10 @@ class DataTable:
                             update(self.veh_table.values(ch_id)['gate_chs'].
                                    union(self.veh_table.values(veh_id)['other_chs']))
                         self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-                    self.net_graph.add_edge(ch_id, veh_id)
+                    if self.veh_table.values(veh_id)['secondary_ch'] is None:
+                        self.net_graph.add_edge(ch_id, veh_id)
+                    elif self.veh_table.values(veh_id)['secondary_ch'] is not None:
+                        self.net_graph.add_edge(secondary_ch, veh_id)
                     for other_ch in self.veh_table.values(veh_id)['other_chs']:
                         self.net_graph.add_edge(veh_id, other_ch)
                     continue

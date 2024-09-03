@@ -40,3 +40,5 @@ if __name__ == "__main__":
     print('stand_alones: ', cluster.stand_alone)
     print("execution time: ", end_time - start_time)
 
+    cluster.net_graph.print_all_edges()
+
