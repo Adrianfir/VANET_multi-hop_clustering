@@ -32,7 +32,7 @@ class Inputs:
         veh_trans_range = 200
         bus_trans_range = 800
         start_time = 1600
-        iter = 5
+        iter = 60
         counter = 4
         priority_counter = 1
         map_zoom = 15.3
