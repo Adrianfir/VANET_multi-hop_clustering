@@ -36,14 +36,13 @@ if __name__ == "__main__":
     end_time = time.time()
     # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
     #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
-    # cluster.show_graph(configs)
-    # cluster.print_table()
+    cluster.show_graph(configs)
+    cluster.print_table()
     print(f'stability_evaluation: {stability}')
     print(f'connection_evaluation: {connections}')
     print('\n')
     print('chs: ', cluster.all_chs)
     print('stand_alones: ', cluster.stand_alone)
     print("execution time: ", end_time - start_time)
-
     print(f'all the edges: \n{cluster.net_graph.edges()}')
 
