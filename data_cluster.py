@@ -87,15 +87,16 @@ class DataTable:
 
             # create the self.net_graph or add the new vertex
             if self.init_count == 1:
-                self.net_graph = Graph(veh.getAttribute('id'), (float(veh.getAttribute('y')),
+                self.net_graph = nx.Graph()
+                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
                                                                 float(veh.getAttribute('x'))
-                                                                )
-                                       )
+                                                                     )
+                                        )
             else:
-                self.net_graph.add_vertex(veh.getAttribute('id'), (float(veh.getAttribute('y')),
+                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
                                                                    float(veh.getAttribute('x'))
                                                                    )
-                                          )
+                                        )
 
     def update(self, config, zones):
         """
@@ -131,24 +132,26 @@ class DataTable:
                     self.all_chs.add(veh.getAttribute('id'))
             # add the vertex to the graph
             try:
-                self.net_graph.adj_list[veh.getAttribute('id')]['pos'] = (float(veh.getAttribute('y')),
+                self.net_graph.nodes[veh.getAttribute('id')]['pos'] = (float(veh.getAttribute('y')),
                                                                           float(veh.getAttribute('x'))
                                                                           )
                 if 'bus' in veh.getAttribute('id'):
-                    self.net_graph.adj_list[veh.getAttribute('id')]['edges'] = list(self.bus_table. \
-                                                                                    values(veh.getAttribute('id'))[
-                                                                                        'cluster_members'])
+                    for i in list(self.bus_table.values(veh.getAttribute('id'))['cluster_members']):
+                        self.net_graph.add_edges_from([(veh.getAttribute('id'), i),
+                                                      (i, veh.getAttribute('id'))]
+                                                      )
                 else:
-                    self.net_graph.adj_list[veh.getAttribute('id')]['edges'] = list(self.veh_table. \
-                                                                                    values(veh.getAttribute('id'))[
-                                                                                        'cluster_members'])
+                    for i in list(self.veh_table.values(veh.getAttribute('id'))['cluster_members']):
+                        self.net_graph.add_edges_from([(veh.getAttribute('id'), i),
+                                                       (i, veh.getAttribute('id'))]
+                                                      )
 
             except KeyError:
 
-                self.net_graph.add_vertex(veh.getAttribute('id'), (float(veh.getAttribute('y')),
+                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
                                                                    float(veh.getAttribute('x'))
-                                                                   )
-                                          )
+                                                                     )
+                                        )
         # removing the buses, that have left the understudied area, from self.bus_table and self.zone_buses
         for k in (self.bus_table.ids() - bus_ids):
             temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
@@ -174,7 +177,7 @@ class DataTable:
             self.left_bus[k] = self.bus_table.values(k)
 
             self.bus_table.remove(k)
-            self.net_graph.remove_vertex(k)
+            self.net_graph.remove_node(k)
 
         # removing the vehicles, that have left the understudied area, from self.veh_table and self.zone_vehicles
 
@@ -226,7 +229,7 @@ class DataTable:
             self.left_veh[k] = self.veh_table.values(k)
 
             self.veh_table.remove(k)
-            self.net_graph.remove_vertex(k)
+            self.net_graph.remove_node(k)
 
     def update_cluster(self, veh_ids, config, zones):
 
@@ -310,7 +313,8 @@ class DataTable:
                     self.zone_ch[self.veh_table.values(veh_id)['zone']].add(veh_id)
                     self.all_chs.add(veh_id)
                 for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                    self.net_graph.add_edge(veh_id, other_ch)
+                    self.net_graph.add_edges_from([(veh_id, other_ch),
+                                                   (other_ch, veh_id)])
                 continue
             # checking if the vehicle is understudied-area and still in transmission range of its current primary_ch
             # or is not in its transmission_range anymore
@@ -367,11 +371,14 @@ class DataTable:
                                    union(self.veh_table.values(veh_id)['other_chs']))
                         self.veh_table.values(veh_id)['other_vehs'] = other_vehs
                     if self.veh_table.values(veh_id)['secondary_ch'] is None:
-                        self.net_graph.add_edge(ch_id, veh_id)
+                        self.net_graph.add_edges_from([(ch_id, veh_id),
+                                                 (veh_id, ch_id)])
                     elif self.veh_table.values(veh_id)['secondary_ch'] is not None:
-                        self.net_graph.add_edge(secondary_ch, veh_id)
+                        self.net_graph.add_edges_from([(secondary_ch, veh_id),
+                                                 (veh_id, secondary_ch)])
                     for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                        self.net_graph.add_edge(veh_id, other_ch)
+                        self.net_graph.add_edges_from([(other_ch, veh_id),
+                                                 (veh_id, other_ch)])
                     continue
                 # here the 'primary_ch' will be changed to None and recursion is applied
                 elif (((self.veh_table.values(veh_id)['secondary_ch'] is None) and
@@ -432,7 +439,8 @@ class DataTable:
                                                  self.zone_buses, self.zone_ch)
             self.bus_table.values(bus)['other_chs'].update(self.bus_table.values(bus)['other_chs'].union(nearby_chs))
             for node in self.bus_table.values(bus)['other_chs']:
-                self.net_graph.add_edge(bus, node)
+                self.net_graph.add_edges_from([(bus, node),
+                                               (node, bus)])
 
         # Here the other_vehs must be updated again. Otherwise, the graph would face with some conflicts
         for veh_id in veh_ids:
@@ -445,7 +453,8 @@ class DataTable:
                 self.veh_table.values(veh_id)['other_vehs'] = (self.veh_table.values(veh_id)['other_vehs'] -
                                                                table.values(ch)['cluster_members'])
                 for other_veh in self.veh_table.values(veh_id)['other_vehs']:
-                    self.net_graph.add_edge(other_veh, veh_id)
+                    self.net_graph.add_edges_from([(other_veh, veh_id),
+                                                 (veh_id, other_veh)])
 
     def single_hop(self, veh_id, config, zones,
                    bus_candidates, ch_candidates, other_vehs):
@@ -592,7 +601,8 @@ class DataTable:
 
                     self.veh_table.values(veh_id)['other_chs'].add(veh_id_2)
                     self.veh_table.values(veh_id_2)['other_chs'].add(veh_id)
-                    self.net_graph.add_edge(veh_id, veh_id_2)
+                    self.net_graph.add_edges_from([(veh_id, veh_id_2),
+                                                 (veh_id_2, veh_id)])
                     selected_chs.add(veh_id)
                     selected_chs.add(veh_id_2)
                     continue
@@ -661,20 +671,35 @@ class DataTable:
             total_clusters += one_veh
         return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
 
+    def eval_connections(self):
+        n = 0      # this would return the minimum number of path needed to connect all the clusters
+        investigated = set()
+        for i in self.all_chs:
+            investigated.add(i)
+            temp_table = self.veh_table if 'veh' in i else self.bus_table
+            for j in (self.all_chs - temp_table.values(i)['other_chs'] -
+                      temp_table.values(i)['gate_chs'] - investigated):
+
+                try:
+                    nx.shortest_path(self.net_graph, source=i, target=j)
+                except nx.exception.NetworkXNoPath:
+                    n += 1
+        return n
+
     def show_graph(self, configs):
         """
         this function will illustrate the self.net_graph
         :return: Graph
         """
-        G = nx.Graph()
-        # Add nodes and edges with coordinates to the networkx graph
-        for vertex, data in self.net_graph.adj_list.items():
-            G.add_node(vertex, pos=data['pos'])
-            for edge in list(set(data['edges'])):
-                G.add_edge(vertex, edge)
+        # G = nx.Graph()
+        # # Add nodes and edges with coordinates to the networkx graph
+        # for vertex, data in self.net_graph.adj_list.items():
+        #     G.add_node(vertex, pos=data['pos'])
+        #     for edge in list(set(data['edges'])):
+        #         G.add_edge(vertex, edge)
 
         # Extract positions from node attributes
-        pos = nx.get_node_attributes(G, 'pos')
+        pos = nx.get_node_attributes(self.net_graph, 'pos')
 
         # Create a folium map centered around the first node
         self.map = folium.Map(location=configs.center_loc, zoom_start=configs.map_zoom, tiles='cartodbpositron',
@@ -708,7 +733,7 @@ class DataTable:
         edge_group = folium.FeatureGroup(name='Graph Edges')
 
         # Add edges to the feature group
-        for edge in G.edges():
+        for edge in self.net_graph.edges():
             start_pos = pos[edge[0]]
             end_pos = pos[edge[1]]
             locations = [start_pos, end_pos]

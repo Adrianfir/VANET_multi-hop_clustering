@@ -187,9 +187,11 @@ def add_member(ch_id, bus_table,
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
     veh_table.values(veh_id)['other_vehs'] = other_vehs
-    net_graph.add_edge(ch_id, veh_id)
+    net_graph.add_edges_from([(ch_id, veh_id),
+                        (veh_id, ch_id)])
     for other_ch in veh_table.values(veh_id)['other_chs']:
-        net_graph.add_edge(other_ch, veh_id)
+        net_graph.add_edges_from([(other_ch, veh_id),
+                            (veh_id, other_ch)])
     return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
             net_graph)
@@ -276,9 +278,11 @@ def add_sub_member(ch_id, bus_table,
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
     veh_table.values(veh_id)['other_vehs'] = other_vehs
-    net_graph.add_edge(sub_ch_id, veh_id)
+    net_graph.add_edges_from([(sub_ch_id, veh_id),
+                        (veh_id, sub_ch_id)])
     for other_ch in veh_table.values(veh_id)['other_chs']:
-        net_graph.add_edge(other_ch, veh_id)
+        net_graph.add_edges_from([(other_ch, veh_id),
+                            (veh_id, other_ch)])
 
     return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
@@ -974,7 +978,8 @@ def update_sa_net_graph(veh_table, k, near_sa, net_graph):
                 if veh_table.values(k)['cluster_head'] + veh_table.values(j)['cluster_head'] == 2:
                     veh_table.values(k)['other_chs'].add(j)
                     veh_table.values(j)['other_chs'].add(k)
-                    net_graph.add_edge(k, j)
+                    net_graph.add_edges_from([(k, j),
+                                        (j, k)])
 
                 elif (veh_table.values(k)['cluster_head'] is True) and \
                         (veh_table.values(j)['cluster_head'] is False):

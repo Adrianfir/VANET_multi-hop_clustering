@@ -25,20 +25,22 @@ if __name__ == "__main__":
         print(cluster.time)
         cluster.update_cluster(cluster.veh_table.ids(), configs, area_zones)
         cluster.stand_alones_cluster(configs, area_zones)
-        cluster.show_graph(configs)
-        cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
+        eval_cluster = cluster.eval_cluster(configs)
+        connection_evaluation = cluster.eval_connections()
+        print(f'stability_evaluation: {eval_cluster}')
+        print(f'connection_evaluation: {connection_evaluation}')
+    #     cluster.show_graph(configs)
+    #     cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
     end_time = time.time()
-    util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
-                        '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
-    cluster.show_graph(configs)
-    cluster.print_table()
-    eval_cluster = cluster.eval_cluster(configs)
+    # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
+    #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
+    # cluster.show_graph(configs)
+    # cluster.print_table()
 
-    print('evaluation: ', eval_cluster)
     print('\n')
     print('chs: ', cluster.all_chs)
     print('stand_alones: ', cluster.stand_alone)
     print("execution time: ", end_time - start_time)
 
-    cluster.net_graph.print_all_edges()
+    print(f'all the edges: \n{cluster.net_graph.edges()}')
 
