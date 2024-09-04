@@ -691,12 +691,6 @@ class DataTable:
         this function will illustrate the self.net_graph
         :return: Graph
         """
-        # G = nx.Graph()
-        # # Add nodes and edges with coordinates to the networkx graph
-        # for vertex, data in self.net_graph.adj_list.items():
-        #     G.add_node(vertex, pos=data['pos'])
-        #     for edge in list(set(data['edges'])):
-        #         G.add_edge(vertex, edge)
 
         # Extract positions from node attributes
         pos = nx.get_node_attributes(self.net_graph, 'pos')

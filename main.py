@@ -19,6 +19,8 @@ if __name__ == "__main__":
     area_zones = ZoneID(configs)  # This is a hash table including all zones and their max and min lat and longs
     area_zones.zones()
     cluster = DataTable(configs, area_zones)
+    stability = list()
+    connections = list()
     start_time = time.time()
     for i in range(configs.iter):
         cluster.update(configs, area_zones)
@@ -27,8 +29,8 @@ if __name__ == "__main__":
         cluster.stand_alones_cluster(configs, area_zones)
         eval_cluster = cluster.eval_cluster(configs)
         connection_evaluation = cluster.eval_connections()
-        print(f'stability_evaluation: {eval_cluster}')
-        print(f'connection_evaluation: {connection_evaluation}')
+        stability.append(eval_cluster)
+        connections.append(connection_evaluation)
     #     cluster.show_graph(configs)
     #     cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
     end_time = time.time()
@@ -36,7 +38,8 @@ if __name__ == "__main__":
     #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
     # cluster.show_graph(configs)
     # cluster.print_table()
-
+    print(f'stability_evaluation: {stability}')
+    print(f'connection_evaluation: {connections}')
     print('\n')
     print('chs: ', cluster.all_chs)
     print('stand_alones: ', cluster.stand_alone)
