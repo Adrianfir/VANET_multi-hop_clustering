@@ -13,7 +13,7 @@ class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
         trace_path = str(pathlib.Path(__file__).parent.parent.absolute().
-                         joinpath('final_data_Richmondhill', 'sumoTrace_no_bus_and_rsu.xml'))
+                         joinpath('final_data_Richmondhill', 'sumoTrace.xml'))
         sumo_edge_path = str(pathlib.Path(__file__).parent.parent.absolute().
                              joinpath('final_data_Richmondhill', 'osm.net.xml'))
         sumo_node_path = str(pathlib.Path(__file__).parent.parent.absolute().
@@ -28,14 +28,22 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = 0.5
-        trans_range = 200
+        veh_trans_range = 200
+        bus_trans_range = 800
         start_time = 1600
         iter = 120
         counter = 4
+        priority_counter = 1
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
+<<<<<<< HEAD
         fps = 10
         weights_s = np.array([0.7, 0, 0.3])       # direction's angle, speed, distance for single
+=======
+        fps = 7
+        weights_s = np.array([1, 0, 0.0])       # direction's angle, speed, distance for single-hop
+        weights_m = np.array([0.9, 0.0, 0.1])       # direction's angle, speed, distance for multi-hop
+>>>>>>> feat/veh_cluster
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,
@@ -54,20 +62,34 @@ class Inputs:
                             help='includes data for all seconds')
         parser.add_argument('--alpha', type=float, default=alpha,
                             help='this is the regularization coefficient to change the sie of the zones based on TR')
-        parser.add_argument('--trans_range', type=int, default=trans_range,
-                            help='this is the transmission range considered in this project and it can be up to 2000')
+        parser.add_argument('--veh_trans_range', type=int, default=veh_trans_range,
+                            help='this is the transmission range of vehicles considered in this project and it can '
+                                 'be up to 2000')
+        parser.add_argument('--bus_trans_range', type=int, default=bus_trans_range,
+                            help='this is the transmission range of buses considered in this project and it can '
+                                 'be up to 2000')
         parser.add_argument('--start_time', type=int, default=start_time,
                             help='This is the time that the initial values would be extract from sumo_trace.xml file')
         parser.add_argument('--counter', type=int, default=counter,
                             help='This is the a counter for vehicle to make themselves as CH if they can not'
                                  ' find any Ch or nearby stand-alone vehicles to create a cluster')
+        parser.add_argument('--priority_counter', type=int, default=priority_counter,
+                            help='This is the a counter for vehicle to join same cluster through sub_chs after leaving '
+                                 'that cluster')
         parser.add_argument('--map_zoom', type=float, default=map_zoom,
                             help='This is the amount to have a specific zoom on the map')
         parser.add_argument('--center_loc', type=float, default=center_loc,
                             help='The specific center location of the map for saving images and make slide-show')
         parser.add_argument('--fps', type=float, default=fps, help='frame per second')
         parser.add_argument('--iter', type=int, default=iter, help='number of intervals to run')
+<<<<<<< HEAD
         parser.add_argument('--weights', type=np.ndarray, default=weights_s, help='weights used for clustering')
+=======
+        parser.add_argument('--weights_s', type=numpy.ndarray, default=weights_s, help='weights used for '
+                                                                                       'single-hop clustering')
+        parser.add_argument('--weights_m', type=numpy.ndarray, default=weights_m, help='weights used for '
+                                                                                       'multi-hop clustering')
+>>>>>>> feat/veh_cluster
         self.parser = parser
 
     def get_parser(self):

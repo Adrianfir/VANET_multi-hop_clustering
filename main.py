@@ -1,7 +1,7 @@
 """
 <<main.py>>
 
-This project is related to clustering and routing problem in VANET
+This project is related to multi-hop clustering in VANET
 
 """
 __author__: str = "Pouya 'Adrian' Firouzmakan"
@@ -18,26 +18,31 @@ if __name__ == "__main__":
 
     area_zones = ZoneID(configs)  # This is a hash table including all zones and their max and min lat and longs
     area_zones.zones()
-    a = DataTable(configs, area_zones)
+    cluster = DataTable(configs, area_zones)
+    stability = list()
+    connections = list()
     start_time = time.time()
     for i in range(configs.iter):
-        a.update(configs, area_zones)
-        print(a.time)
-        a.update_cluster(a.veh_table.ids(), configs, area_zones)
-        a.stand_alones_cluster(configs, area_zones)
-        # a.show_graph(configs)
-        # a.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/Graph' + str(i))
+        cluster.update(configs, area_zones)
+        print(cluster.time)
+        cluster.update_cluster(cluster.veh_table.ids(), configs, area_zones)
+        cluster.stand_alones_cluster(configs, area_zones)
+        eval_cluster = cluster.eval_cluster(configs)
+        connection_evaluation = cluster.eval_connections()
+        stability.append(eval_cluster)
+        connections.append(connection_evaluation)
+    #     cluster.show_graph(configs)
+    #     cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
     end_time = time.time()
-    # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/',
-    #                     '/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/', configs.fps)
-    # a.show_graph(configs)
-    a.print_table()
-    eval_cluster = a.eval_cluster(configs)
-    print('evaluation: ', eval_cluster)
-    print('n_bus: ', len(a.bus_table.ids()))
-    print('n_veh: ', len(a.veh_table.ids()))
+    # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
+    #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
+    cluster.show_graph(configs)
+    cluster.print_table()
+    print(f'stability_evaluation: {stability}')
+    print(f'connection_evaluation: {connections}')
     print('\n')
-    print('chs: ', a.all_chs)
-    print('stand_alones: ', a.stand_alone)
+    print('chs: ', cluster.all_chs)
+    print('stand_alones: ', cluster.stand_alone)
     print("execution time: ", end_time - start_time)
+    print(f'all the edges: \n{cluster.net_graph.edges()}')
 
