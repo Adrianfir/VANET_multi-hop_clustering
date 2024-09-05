@@ -16,6 +16,7 @@ import sys
 
 from graph import Graph
 import utils.util as util
+import utils.util_graph as util_graph
 import hash
 
 
@@ -107,6 +108,7 @@ class DataTable:
         self.time += 1
         bus_ids = set()
         veh_ids = set()
+        self.net_graph.remove_edges_from(self.net_graph.edges())
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
             zone_id = zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
@@ -135,16 +137,6 @@ class DataTable:
                 self.net_graph.nodes[veh.getAttribute('id')]['pos'] = (float(veh.getAttribute('y')),
                                                                           float(veh.getAttribute('x'))
                                                                           )
-                if 'bus' in veh.getAttribute('id'):
-                    for i in list(self.bus_table.values(veh.getAttribute('id'))['cluster_members']):
-                        self.net_graph.add_edges_from([(veh.getAttribute('id'), i),
-                                                      (i, veh.getAttribute('id'))]
-                                                      )
-                else:
-                    for i in list(self.veh_table.values(veh.getAttribute('id'))['cluster_members']):
-                        self.net_graph.add_edges_from([(veh.getAttribute('id'), i),
-                                                       (i, veh.getAttribute('id'))]
-                                                      )
 
             except KeyError:
 
@@ -310,11 +302,12 @@ class DataTable:
                                                                       union(bus_candidates))
                     self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
                                                                       union(ch_candidates))
+                    (self.veh_table.values(veh_id)['other_vehs'].
+                     update(self.veh_table.values(veh_id)['other_vehs'].
+                            union(other_vehs - self.veh_table.values(veh_id)['cluster_members'])))
                     self.zone_ch[self.veh_table.values(veh_id)['zone']].add(veh_id)
                     self.all_chs.add(veh_id)
-                for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                    self.net_graph.add_edges_from([(veh_id, other_ch),
-                                                   (other_ch, veh_id)])
+
                 continue
             # checking if the vehicle is understudied-area and still in transmission range of its current primary_ch
             # or is not in its transmission_range anymore
@@ -370,15 +363,7 @@ class DataTable:
                             update(self.veh_table.values(ch_id)['gate_chs'].
                                    union(self.veh_table.values(veh_id)['other_chs']))
                         self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-                    if self.veh_table.values(veh_id)['secondary_ch'] is None:
-                        self.net_graph.add_edges_from([(ch_id, veh_id),
-                                                 (veh_id, ch_id)])
-                    elif self.veh_table.values(veh_id)['secondary_ch'] is not None:
-                        self.net_graph.add_edges_from([(secondary_ch, veh_id),
-                                                 (veh_id, secondary_ch)])
-                    for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                        self.net_graph.add_edges_from([(other_ch, veh_id),
-                                                 (veh_id, other_ch)])
+
                     continue
                 # here the 'primary_ch' will be changed to None and recursion is applied
                 elif (((self.veh_table.values(veh_id)['secondary_ch'] is None) and
@@ -438,9 +423,9 @@ class DataTable:
             nearby_chs = util.det_buses_other_ch(bus, self.veh_table, self.bus_table,
                                                  self.zone_buses, self.zone_ch)
             self.bus_table.values(bus)['other_chs'].update(self.bus_table.values(bus)['other_chs'].union(nearby_chs))
-            for node in self.bus_table.values(bus)['other_chs']:
-                self.net_graph.add_edges_from([(bus, node),
-                                               (node, bus)])
+            # for node in self.bus_table.values(bus)['other_chs']:
+            #     self.net_graph.add_edges_from([(bus, node),
+            #                                    (node, bus)])
 
         # Here the other_vehs must be updated again. Otherwise, the graph would face with some conflicts
         for veh_id in veh_ids:
@@ -452,9 +437,9 @@ class DataTable:
                     table = self.veh_table
                 self.veh_table.values(veh_id)['other_vehs'] = (self.veh_table.values(veh_id)['other_vehs'] -
                                                                table.values(ch)['cluster_members'])
-                for other_veh in self.veh_table.values(veh_id)['other_vehs']:
-                    self.net_graph.add_edges_from([(other_veh, veh_id),
-                                                 (veh_id, other_veh)])
+                # for other_veh in self.veh_table.values(veh_id)['other_vehs']:
+                #     self.net_graph.add_edges_from([(other_veh, veh_id),
+                #                                  (veh_id, other_veh)])
 
     def single_hop(self, veh_id, config, zones,
                    bus_candidates, ch_candidates, other_vehs):
@@ -601,8 +586,8 @@ class DataTable:
 
                     self.veh_table.values(veh_id)['other_chs'].add(veh_id_2)
                     self.veh_table.values(veh_id_2)['other_chs'].add(veh_id)
-                    self.net_graph.add_edges_from([(veh_id, veh_id_2),
-                                                 (veh_id_2, veh_id)])
+                    # self.net_graph.add_edges_from([(veh_id, veh_id_2),
+                    #                              (veh_id_2, veh_id)])
                     selected_chs.add(veh_id)
                     selected_chs.add(veh_id_2)
                     continue
@@ -625,8 +610,8 @@ class DataTable:
                 mem_control.add(veh_id)
 
         # Determining the updating self.veh_tale and self.net_graph
-        for k in near_sa.keys():
-            self.veh_table, self.net_graph = util.update_sa_net_graph(self.veh_table, k, near_sa, self.net_graph)
+        # for k in near_sa.keys():
+            # self.veh_table, self.net_graph = util.update_sa_net_graph(self.veh_table, k, near_sa, self.net_graph)
 
         self.update_cluster(self.veh_table.ids(), configs, zones)
 
@@ -671,6 +656,16 @@ class DataTable:
             total_clusters += one_veh
         return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
 
+    def form_net_graph(self):
+        all_veh_ids = self.veh_table.ids()
+        for veh_id in self.veh_table.ids():
+            if self.veh_table.values(veh_id)['cluster_had'] is False:
+                self.net_graph = util_graph.veh_add_edges(veh_id, self.veh_table,
+                                                          self.bus_table, self.net_graph)
+            if self.veh_table.values(veh_id)['cluster_had'] is True:
+                self.net_graph = util_graph.ch_add_edges(veh_id, self.veh_table,
+                                                          self.bus_table, self.net_graph)
+        return True
     def eval_connections(self):
         n = 0      # this would return the minimum number of path needed to connect all the clusters
         investigated = set()

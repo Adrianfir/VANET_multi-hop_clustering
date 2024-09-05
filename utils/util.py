@@ -187,11 +187,7 @@ def add_member(ch_id, bus_table,
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
     veh_table.values(veh_id)['other_vehs'] = other_vehs
-    net_graph.add_edges_from([(ch_id, veh_id),
-                        (veh_id, ch_id)])
-    for other_ch in veh_table.values(veh_id)['other_chs']:
-        net_graph.add_edges_from([(other_ch, veh_id),
-                            (veh_id, other_ch)])
+
     return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
             net_graph)
@@ -278,11 +274,11 @@ def add_sub_member(ch_id, bus_table,
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
     veh_table.values(veh_id)['other_vehs'] = other_vehs
-    net_graph.add_edges_from([(sub_ch_id, veh_id),
-                        (veh_id, sub_ch_id)])
-    for other_ch in veh_table.values(veh_id)['other_chs']:
-        net_graph.add_edges_from([(other_ch, veh_id),
-                            (veh_id, other_ch)])
+    # net_graph.add_edges_from([(sub_ch_id, veh_id),
+    #                     (veh_id, sub_ch_id)])
+    # for other_ch in veh_table.values(veh_id)['other_chs']:
+    #     net_graph.add_edges_from([(other_ch, veh_id),
+    #                         (veh_id, other_ch)])
 
     return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
@@ -325,7 +321,7 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     if mem_stays is True:
         stand_alone.add(mem)
         zone_stand_alone[veh_table.values(mem)['zone']].add(mem)
-    net_graph.remove_edge(ch_id, mem)
+    # net_graph.remove_edge(ch_id, mem)
     veh_table.values(mem)['primary_ch'] = None
     veh_table.values(mem)['secondary_ch'] = None
     veh_table.values(mem)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
@@ -362,7 +358,7 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
         stand_alone.add(sub_mem_id)
         zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
     veh_table.values(sub_ch_id)['sub_cluster_members'].remove(sub_mem_id)
-    net_graph.remove_edge(sub_mem_id, sub_ch_id)
+    # net_graph.remove_edge(sub_mem_id, sub_ch_id)
     if 'bus' in ch_id:
         bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
     else:
@@ -764,7 +760,7 @@ def det_beta(bus_candidates, ch_candidates,
 def update_bus_table(veh, bus_table, zone_id, understudied_area, zones, config, zone_buses, zone_ch, current_time):
     """
     this function updates the bus_tabel and zone_buses from main.py
-    :param current_time: self.time in the data_cluster.py
+    :param current_time: "self.time" in the data_cluster.py
     :param zone_ch: the self.zone_ch dictionary
     :param veh: it's the veh from .xml file
     :param bus_table: its bus_table
@@ -799,6 +795,7 @@ def update_bus_table(veh, bus_table, zone_id, understudied_area, zones, config, 
         bus_table.values(veh.getAttribute('id'))['gate_chs'] = set()
         bus_table.values(veh.getAttribute('id'))['gates'] = dict()
         bus_table.values(veh.getAttribute('id'))['other_chs'] = set()
+        bus_table.values(veh.getAttribute('id'))['other_vehs'] = set()
         zone_buses[zone_id].add(veh.getAttribute('id'))
         zone_ch[zone_id].add(veh.getAttribute('id'))
 
@@ -860,6 +857,7 @@ def update_veh_table(veh, veh_table, zone_id, understudied_area, zones, config,
         veh_table.values(veh.getAttribute('id'))['gate_chs'] = set()
         veh_table.values(veh.getAttribute('id'))['gates'] = dict()
         veh_table.values(veh.getAttribute('id'))['other_chs'] = set()
+        veh_table.values(veh.getAttribute('id'))['other_vehs'] = set()
         zone_vehicles[zone_id].add(veh.getAttribute('id'))
         if veh_table.values(veh.getAttribute('id'))['cluster_head'] is True:
             zone_ch[zone_id].add(veh.getAttribute('id'))
