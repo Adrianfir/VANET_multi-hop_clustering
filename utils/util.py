@@ -168,8 +168,12 @@ def add_member(ch_id, bus_table,
     # bus_candidates.remove(bus_ch)
     veh_table.values(veh_id)['other_chs']. \
         update(veh_table.values(veh_id)['other_chs'].union(bus_candidates))
+    for i in bus_candidates:
+        bus_table.values(i)['other_vehs'].add(veh_id)
     veh_table.values(veh_id)['other_chs']. \
         update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
+    for i in ch_candidates:
+        veh_table.values(i)['other_vehs'].add(veh_id)
     if ch_id in veh_table.values(veh_id)['other_chs']:
         veh_table.values(veh_id)['other_chs'].remove(ch_id)
     if 'bus' in ch_id:
@@ -1239,3 +1243,57 @@ def det_linkage_fac(veh_table, veh_id):
     for i in veh_table.values(veh_id)['other_vehs']:
         d_i += len(veh_table.values(i)['other_vehs'])
     return (0.5 * d) + (0.5 * d_i)
+
+def other_connections_update(veh_table, bus_table, zone_ch,
+                             zone_buses, zone_vehicles):
+    """
+    In this funtion, the other_chs, other_vehs, gate_chs, and gates would be updated after
+    :param veh_table:
+    :param bus_table:
+    :param zone_ch:
+    :param zone_buses:
+    :param zone_vehicles:
+    :return:
+    """
+    for veh_id in veh_table.ids():
+        (bus_candidates, ch_candidates,
+         sub_ch_candidates, other_vehs) = det_near_ch(veh_id, veh_table, bus_table, zone_buses, zone_vehicles)
+
+        if veh_table.values(veh_id)['primary_ch'] is not None:
+            ch = veh_table.values(veh_id)['primary_ch']
+            secondary_ch = veh_table.values(veh_id)['secondary_ch']
+            veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates) - {ch}
+            veh_table.values(veh_id)['other_vehs'] = other_vehs - {secondary_ch}
+            if 'veh' in ch:
+                veh_table.values(ch)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+                veh_table.values(ch)['gate_chs'] = veh_table.values(veh_id)['other_chs']
+            else:
+                bus_table.values(ch)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
+                bus_table.values(ch)['gate_chs'] = veh_table.values(veh_id)['other_chs']
+
+        elif veh_table.values(veh_id)['cluster_head'] is True:
+            veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates)
+            veh_table.values(veh_id)['other_vehs'] = (other_vehs - veh_table.values(veh_id)['cluster_members'] -
+                                                      veh_table.values(veh_id)['_sub_cluster_members'])
+
+    for bus in bus_table.id():
+        bus_other_vehs = set()
+        neigh_veh = set()
+
+        for neigh_z in bus_table.values(bus)['neighbor_zones']:
+            neigh_veh += zone_vehicles[neigh_z]
+
+        for j in neigh_veh:
+            euclidian_dist = det_dist(bus, bus_table, j, veh_table)
+
+            if euclidian_dist <= min(bus_table.values(bus)['trans_range'],
+                                     veh_table.values(j)['trans_range']):
+                if veh_table.values(j)['primary_ch'] != bus:
+                    bus_other_vehs.add(j)
+        bus_table.values[bus]['other_vehs'] = (bus_other_vehs - bus_table.values[bus]['cluster_members'] -
+                                               bus_table.values[bus]['sub_cluster_members'])
+
+        bus_table.values[bus]['other_chs'] = det_buses_other_ch(bus, veh_table,bus_table, zone_buses, zone_ch)
+
+    return veh_table, bus_table
+

@@ -51,7 +51,6 @@ def ch_add_edges(veh_id, veh_table, bus_table, net_graph):
                      veh_table.valeus(veh_id)['other_vehs'], veh_table.valeus(veh_id)['cluster_members'])
 
 
-
 def bus_add_edges(bus_id, veh_table, bus_table, net_graph):
     """
 
