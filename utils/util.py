@@ -1263,7 +1263,7 @@ def other_connections_update(veh_table, bus_table, zone_ch,
             ch = veh_table.values(veh_id)['primary_ch']
             secondary_ch = veh_table.values(veh_id)['secondary_ch']
             veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates) - {ch}
-            veh_table.values(veh_id)['other_vehs'] = other_vehs - {secondary_ch}
+            veh_table.values(veh_id)['other_vehs'] = other_vehs - {secondary_ch} - {veh_id}
             if 'veh' in ch:
                 veh_table.values(ch)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
                 veh_table.values(ch)['gate_chs'] = veh_table.values(veh_id)['other_chs']
@@ -1274,11 +1274,14 @@ def other_connections_update(veh_table, bus_table, zone_ch,
         elif veh_table.values(veh_id)['cluster_head'] is True:
             veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates)
             veh_table.values(veh_id)['other_vehs'] = (other_vehs - veh_table.values(veh_id)['cluster_members'] -
-                                                      veh_table.values(veh_id)['_sub_cluster_members'])
+                                                      veh_table.values(veh_id)['sub_cluster_members']) - {veh_id}
 
-    for bus in bus_table.id():
+        else:
+            veh_table.values(veh_id)['other_vehs'] = other_vehs - {veh_id}
+
+    for bus in bus_table.ids():
         bus_other_vehs = set()
-        neigh_veh = set()
+        neigh_veh = list()
 
         for neigh_z in bus_table.values(bus)['neighbor_zones']:
             neigh_veh += zone_vehicles[neigh_z]
@@ -1290,10 +1293,10 @@ def other_connections_update(veh_table, bus_table, zone_ch,
                                      veh_table.values(j)['trans_range']):
                 if veh_table.values(j)['primary_ch'] != bus:
                     bus_other_vehs.add(j)
-        bus_table.values[bus]['other_vehs'] = (bus_other_vehs - bus_table.values[bus]['cluster_members'] -
-                                               bus_table.values[bus]['sub_cluster_members'])
+        bus_table.values(bus)['other_vehs'] = (bus_other_vehs - bus_table.values(bus)['cluster_members'] -
+                                               bus_table.values(bus)['sub_cluster_members'])
 
-        bus_table.values[bus]['other_chs'] = det_buses_other_ch(bus, veh_table,bus_table, zone_buses, zone_ch)
+        bus_table.values(bus)['other_chs'] = det_buses_other_ch(bus, veh_table,bus_table, zone_buses, zone_ch)
 
     return veh_table, bus_table
 
