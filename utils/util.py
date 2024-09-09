@@ -58,6 +58,7 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
                 sub_cluster_members=set(),
                 gate_chs=set(),
                 gates=dict(),
+                other_vehs=set(),
                 ip=None,
                 mac=mac_address(),
                 counter=config.counter

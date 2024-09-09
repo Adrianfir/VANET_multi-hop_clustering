@@ -36,13 +36,10 @@ class Inputs:
         priority_counter = 1
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
-
-
         fps = 5
-        weights_s = np.array([0.5, 0.0, 0.5])       # direction's angle, speed, distance for single-hop
 
-        weights_m = np.array([0.9, 0.0, 0.1])       # direction's angle, speed, distance for multi-hop
-
+        weights_s = np.array([0.7, 0.0, 0.3])       # direction's angle, speed, distance for single-hop
+        weights_m = np.array([0.8, 0.0, 0.2])       # direction's angle, speed, distance for multi-hop
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,

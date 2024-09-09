@@ -19,7 +19,6 @@ if __name__ == "__main__":
     area_zones = ZoneID(configs)  # This is a hash table including all zones and their max and min lat and longs
     area_zones.zones()
     cluster = DataTable(configs, area_zones)
-    stability = list()
     connections = list()
     start_time = time.time()
     for i in range(configs.iter):
