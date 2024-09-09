@@ -611,13 +611,13 @@ class DataTable:
         for i in self.all_chs:
             investigated.add(i)
             temp_table = self.veh_table if 'veh' in i else self.bus_table
-            for j in (self.all_chs - temp_table.values(i)['other_chs'] -
-                      temp_table.values(i)['gate_chs'] - investigated):
-
-                try:
-                    nx.shortest_path(self.net_graph, source=i, target=j)
-                except nx.exception.NetworkXNoPath:
-                    n += 1
+            if temp_table.values(i)['cluster_members'] != set():
+                for j in (self.all_chs - temp_table.values(i)['other_chs'] -
+                          temp_table.values(i)['gate_chs'] - investigated):
+                    try:
+                        nx.shortest_path(self.net_graph, source=i, target=j)
+                    except nx.exception.NetworkXNoPath:
+                        n += 1
         return n
 
     def show_graph(self, configs):

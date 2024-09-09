@@ -33,12 +33,12 @@ if __name__ == "__main__":
         connection_evaluation = cluster.eval_connections()
         stability.append(eval_cluster)
         connections.append(connection_evaluation)
-        cluster.show_graph(configs)
-        cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
-
+    #     cluster.show_graph(configs)
+    #     cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
+    #
     end_time = time.time()
-    util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
-                        '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
+    # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
+    #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
     cluster.print_table()
     print(f'stability_evaluation: {stability}')
     print(f'connection_evaluation: {connections}')
