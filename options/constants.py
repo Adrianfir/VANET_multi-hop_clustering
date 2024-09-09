@@ -28,7 +28,7 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = 0.5
-        veh_trans_range = 200
+        veh_trans_range = 100
         bus_trans_range = 800
         start_time = 1600
         iter = 120
@@ -37,11 +37,16 @@ class Inputs:
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
 <<<<<<< HEAD
+<<<<<<< HEAD
         fps = 10
         weights_s = np.array([0.7, 0, 0.3])       # direction's angle, speed, distance for single
 =======
         fps = 7
         weights_s = np.array([1, 0, 0.0])       # direction's angle, speed, distance for single-hop
+=======
+        fps = 5
+        weights_s = np.array([0.5, 0.0, 0.5])       # direction's angle, speed, distance for single-hop
+>>>>>>> feat/veh_cluster
         weights_m = np.array([0.9, 0.0, 0.1])       # direction's angle, speed, distance for multi-hop
 >>>>>>> feat/veh_cluster
 
