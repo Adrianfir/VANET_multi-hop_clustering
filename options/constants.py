@@ -36,19 +36,13 @@ class Inputs:
         priority_counter = 1
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
-<<<<<<< HEAD
-<<<<<<< HEAD
-        fps = 10
-        weights_s = np.array([0.7, 0, 0.3])       # direction's angle, speed, distance for single
-=======
-        fps = 7
-        weights_s = np.array([1, 0, 0.0])       # direction's angle, speed, distance for single-hop
-=======
+
+
         fps = 5
         weights_s = np.array([0.5, 0.0, 0.5])       # direction's angle, speed, distance for single-hop
->>>>>>> feat/veh_cluster
+
         weights_m = np.array([0.9, 0.0, 0.1])       # direction's angle, speed, distance for multi-hop
->>>>>>> feat/veh_cluster
+
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,
@@ -87,14 +81,11 @@ class Inputs:
                             help='The specific center location of the map for saving images and make slide-show')
         parser.add_argument('--fps', type=float, default=fps, help='frame per second')
         parser.add_argument('--iter', type=int, default=iter, help='number of intervals to run')
-<<<<<<< HEAD
         parser.add_argument('--weights', type=np.ndarray, default=weights_s, help='weights used for clustering')
-=======
-        parser.add_argument('--weights_s', type=numpy.ndarray, default=weights_s, help='weights used for '
+        parser.add_argument('--weights_s', type=np.ndarray, default=weights_s, help='weights used for '
                                                                                        'single-hop clustering')
-        parser.add_argument('--weights_m', type=numpy.ndarray, default=weights_m, help='weights used for '
+        parser.add_argument('--weights_m', type=np.ndarray, default=weights_m, help='weights used for '
                                                                                        'multi-hop clustering')
->>>>>>> feat/veh_cluster
         self.parser = parser
 
     def get_parser(self):
