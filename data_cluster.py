@@ -265,7 +265,6 @@ class DataTable:
                         self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
                         self.veh_table.values(veh_id)['priority_ch'] = None
                     self.stand_alone.add(veh_id)
-                    self.veh_table.values(veh_id)['other_vehs'] = other_vehs
                     self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].add(veh_id)
                     continue
                 else:
@@ -304,15 +303,10 @@ class DataTable:
                     self.update_cluster([veh_id, ], config, zones)
 
                 else:
-                    ch_candidates.remove(veh_id)
-                    self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
-                                                                      union(bus_candidates))
-                    self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
-                                                                      union(ch_candidates))
+
                     self.zone_ch[self.veh_table.values(veh_id)['zone']].add(veh_id)
                     self.all_chs.add(veh_id)
-                for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                    self.net_graph.add_edge(veh_id, other_ch)
+
                 continue
             # checking if the vehicle is understudied-area and still in transmission range of its current primary_ch
             # or is not in its transmission_range anymore
@@ -341,36 +335,12 @@ class DataTable:
                          (dist_to_secondarych <= min(self.veh_table.values(veh_id)['trans_range'],
                                                      self.veh_table.values(secondary_ch)['trans_range'])))):
 
-                    self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
-                                                                      union(bus_candidates))
-                    self.veh_table.values(veh_id)['other_chs'].update(self.veh_table.values(veh_id)['other_chs'].
-                                                                      union(ch_candidates))
-                    # assert self.veh_table.values(veh_id)['primary_ch'] in self.veh_table.values(veh_id)['other_chs']
-                    if ch_id in self.veh_table.values(veh_id)['other_chs']:
-                        self.veh_table.values(veh_id)['other_chs'].remove(ch_id)
                     # the following conditional is for making sure that self.update_cluster called inside
                     # self.stand_alones_cluster would not add 1 to timer of cluster_record
                     if self.veh_table.values(veh_id)['cluster_record'].tail.value['start_time'] + \
                             self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] - 1 != self.time:
                         self.veh_table.values(veh_id)['cluster_record'].tail.value['timer'] += 1
-                    # updating 'gates' and 'gate_chs' considering if the primary_ch is bus or vehicle-ch
-                    if 'bus' in ch_id:
-                        self.bus_table.values(ch_id)['gates'][veh_id] = \
-                            self.veh_table.values(veh_id)['other_chs']
-                        self.bus_table.values(ch_id)['gate_chs']. \
-                            update(self.bus_table.values(ch_id)['gate_chs'].
-                                   union(self.veh_table.values(veh_id)['other_chs']))
-                        self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-                    else:
-                        self.veh_table.values(ch_id)['gates'][veh_id] = \
-                            self.veh_table.values(veh_id)['other_chs']
-                        self.veh_table.values(ch_id)['gate_chs']. \
-                            update(self.veh_table.values(ch_id)['gate_chs'].
-                                   union(self.veh_table.values(veh_id)['other_chs']))
-                        self.veh_table.values(veh_id)['other_vehs'] = other_vehs
-                    self.net_graph.add_edge(ch_id, veh_id)
-                    for other_ch in self.veh_table.values(veh_id)['other_chs']:
-                        self.net_graph.add_edge(veh_id, other_ch)
+
                     continue
                 # here the 'primary_ch' will be changed to None and recursion is applied
                 elif (((self.veh_table.values(veh_id)['secondary_ch'] is None) and
@@ -421,29 +391,6 @@ class DataTable:
                          ch_candidates, sub_ch_candidates, other_vehs)
 
             self.check_general_framework(veh_id)
-
-        # finding buses' other_chs
-        for bus in self.bus_table.ids():
-            self.bus_table.values(bus)['other_chs'] = set()
-        for bus in self.bus_table.ids():
-            nearby_chs = util.det_buses_other_ch(bus, self.veh_table, self.bus_table,
-                                                 self.zone_buses, self.zone_ch)
-            self.bus_table.values(bus)['other_chs'].update(self.bus_table.values(bus)['other_chs'].union(nearby_chs))
-            for node in self.bus_table.values(bus)['other_chs']:
-                self.net_graph.add_edge(bus, node)
-
-        # Here the other_vehs must be updated again. Otherwise, the graph would face with some conflicts
-        for veh_id in veh_ids:
-            if self.veh_table.values(veh_id)['primary_ch'] is not None:
-                ch = self.veh_table.values(veh_id)['primary_ch']
-                if 'bus' in ch:
-                    table = self.bus_table
-                else:
-                    table = self.veh_table
-                self.veh_table.values(veh_id)['other_vehs'] = (self.veh_table.values(veh_id)['other_vehs'] -
-                                                               table.values(ch)['cluster_members'])
-                for other_veh in self.veh_table.values(veh_id)['other_vehs']:
-                    self.net_graph.add_edge(other_veh, veh_id)
 
     def pmc(self, veh_id, config, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
