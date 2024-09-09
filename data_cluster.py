@@ -152,10 +152,10 @@ class DataTable:
                     # from the cluster_members if it was a sum_member and its secondary_ch is already removed
                     # from the cluster:
 
-                    (self.veh_table, self.bus_table, self.net_graph,
+                    (self.veh_table, self.bus_table,
                      self.stand_alone, self.zone_stand_alone) = util.remove_member(m, k, self.veh_table,
                                                                                    self.bus_table, config,
-                                                                                   self.net_graph, self.stand_alone,
+                                                                                   self.stand_alone,
                                                                                    self.zone_stand_alone,
                                                                                    ch_stays=False)
                     # since k is not inside the area anymore, the priority_ch must be None
@@ -181,10 +181,10 @@ class DataTable:
                     if m in self.veh_table.values(k)['cluster_members']:  # because m is might be removed
                         # from the cluster_members if it was a sum_member and its secondary_ch is already removed
                         # from the cluster
-                        (self.veh_table, self.bus_table, self.net_graph,
+                        (self.veh_table, self.bus_table,
                          self.stand_alone, self.zone_stand_alone) = util.remove_member(m, k, self.veh_table,
                                                                                        self.bus_table, config,
-                                                                                       self.net_graph, self.stand_alone,
+                                                                                       self.stand_alone,
                                                                                        self.zone_stand_alone,
                                                                                        ch_stays=False)
 
@@ -195,20 +195,19 @@ class DataTable:
                 k_ch = self.veh_table.values(k)['primary_ch']
                 if self.veh_table.values(k)['secondary_ch'] is not None:
                     secondary_ch = self.veh_table.values(k)['secondary_ch']
-                    (self.veh_table, self.bus_table, self.net_graph,
+                    (self.veh_table, self.bus_table,
                      self.stand_alone, self.zone_stand_alone) = util.remove_sub_member(k, secondary_ch, k_ch,
                                                                                        self.veh_table,
                                                                                        self.bus_table, config,
-                                                                                       self.net_graph,
                                                                                        self.stand_alone,
                                                                                        self.zone_stand_alone,
                                                                                        sub_mem_stays=False)
 
                 else:
-                    (self.veh_table, self.bus_table, self.net_graph,
+                    (self.veh_table, self.bus_table,
                      self.stand_alone, self.zone_stand_alone) = util.remove_member(k, k_ch, self.veh_table,
                                                                                    self.bus_table, config,
-                                                                                   self.net_graph, self.stand_alone,
+                                                                                   self.stand_alone,
                                                                                    self.zone_stand_alone,
                                                                                    mem_stays=False)
 
@@ -281,7 +280,7 @@ class DataTable:
                             (self.veh_table, self.bus_table, self.net_graph,
                              self.stand_alone, self.zone_stand_alone) = (
                                 util.remove_member(m, veh_id, self.veh_table, self.bus_table, config,
-                                                   self.net_graph, self.stand_alone, self.zone_stand_alone))
+                                                   self.stand_alone, self.zone_stand_alone))
 
                 # if the veh_id is a ch and does not have any member, after changing its zone, it won't remain as a ch
                 # unless get selected by another vehicles or can't find a cluster head after the counter
@@ -344,21 +343,19 @@ class DataTable:
                        (dist_to_secondarych > min(self.veh_table.values(veh_id)['trans_range'],
                                                   self.veh_table.values(secondary_ch)['trans_range'])))):
                     if self.veh_table.values(veh_id)['secondary_ch'] is None:
-                        (self.veh_table, self.bus_table, self.net_graph,
+                        (self.veh_table, self.bus_table,
                          self.stand_alone, self.zone_stand_alone) = (util.remove_member(veh_id, ch_id,
                                                                                         self.veh_table, self.bus_table,
-                                                                                        config, self.net_graph,
-                                                                                        self.stand_alone,
+                                                                                        config, self.stand_alone,
                                                                                         self.zone_stand_alone))
                     else:
                         sec_ch = self.veh_table.values(veh_id)['secondary_ch']
                         ch_id = self.veh_table.values(veh_id)['primary_ch']
                         # print(veh_id in veh_ids)
-                        (self.veh_table, self.bus_table, self.net_graph,
+                        (self.veh_table, self.bus_table,
                          self.stand_alone, self.zone_stand_alone) = util.remove_sub_member(veh_id, sec_ch, ch_id,
                                                                                            self.veh_table,
                                                                                            self.bus_table, config,
-                                                                                           self.net_graph,
                                                                                            self.stand_alone,
                                                                                            self.zone_stand_alone)
 
@@ -408,22 +405,20 @@ class DataTable:
                 bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
                                             prior_bus_candidates, config)
                 (self.bus_table, self.veh_table,
-                 self.stand_alone, self.zone_stand_alone,
-                 self.net_graph) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
+                 self.stand_alone,
+                 self.zone_stand_alone) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
                                                    config, ef, self.time, bus_candidates,
                                                    ch_candidates, self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph,
-                                                   other_vehs)
+                                                   self.zone_stand_alone, other_vehs)
             elif len(prior_bus_candidates) == 0:
                 veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
                                             prior_ch_candidates, config)
                 (self.bus_table, self.veh_table,
-                 self.stand_alone, self.zone_stand_alone,
-                 self.net_graph) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
+                 self.stand_alone,
+                 self.zone_stand_alone) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
                                                    config, ef, self.time, bus_candidates,
                                                    ch_candidates, self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph,
-                                                   other_vehs)
+                                                   self.zone_stand_alone, other_vehs)
 
         elif (len(bus_candidates) > 0) and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0):
 
@@ -431,12 +426,11 @@ class DataTable:
                                         bus_candidates, config)  # determine the best from bus_candidates
 
             (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
+             self.stand_alone,
+             self.zone_stand_alone) = util.add_member(bus_ch, self.bus_table, veh_id, self.veh_table,
                                                config, ef, self.time, bus_candidates,
                                                ch_candidates, self.stand_alone,
-                                               self.zone_stand_alone, self.net_graph,
-                                               other_vehs)
+                                               self.zone_stand_alone, other_vehs)
 
         elif ((len(bus_candidates) == 0) and (len(ch_candidates) > 0)
               and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0)):
@@ -445,12 +439,11 @@ class DataTable:
                                         zones, ch_candidates, config)  # determine the best from vehicles
 
             (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
+             self.stand_alone,
+             self.zone_stand_alone) = util.add_member(veh_ch, self.bus_table, veh_id, self.veh_table,
                                                config, ef, self.time, bus_candidates,
                                                ch_candidates, self.stand_alone,
-                                               self.zone_stand_alone, self.net_graph,
-                                               other_vehs)
+                                               self.zone_stand_alone, other_vehs)
 
         self.check_general_framework(veh_id)
 
@@ -467,24 +460,22 @@ class DataTable:
 
         if (('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True)) or ('bus' in ch):
             (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_member(ch, self.bus_table, veh_id, self.veh_table,
+             self.stand_alone,
+             self.zone_stand_alone) = util.add_member(ch, self.bus_table, veh_id, self.veh_table,
                                                config, ef, self.time, bus_candidates,
                                                ch_candidates, self.stand_alone,
-                                               self.zone_stand_alone, self.net_graph,
-                                               other_vehs)
+                                               self.zone_stand_alone, other_vehs)
 
         if ('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is False):
             sub_ch = ch
             veh_ch = self.veh_table.values(sub_ch)['primary_ch']
 
             (self.bus_table, self.veh_table,
-             self.stand_alone, self.zone_stand_alone,
-             self.net_graph) = util.add_sub_member(veh_ch, self.bus_table, veh_id, sub_ch, self.veh_table,
+             self.stand_alone,
+             self.zone_stand_alone) = util.add_sub_member(veh_ch, self.bus_table, veh_id, sub_ch, self.veh_table,
                                                    config, ef, self.time, bus_candidates,
                                                    ch_candidates, self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph,
-                                                   other_vehs)
+                                                   self.zone_stand_alone, other_vehs)
         self.check_general_framework(veh_id)
 
     def stand_alones_cluster(self, configs, zones):
@@ -546,16 +537,12 @@ class DataTable:
                                                                     self.zone_ch, configs, its_sa_clustering=True)
 
                 (self.bus_table, self.veh_table,
-                 self.stand_alone, self.zone_stand_alone,
-                 self.net_graph) = util.add_member(ch, self.bus_table, veh_id, self.veh_table,
+                 self.stand_alone,
+                 self.zone_stand_alone) = util.add_member(ch, self.bus_table, veh_id, self.veh_table,
                                                    configs, ef, self.time, set(), set(), self.stand_alone,
-                                                   self.zone_stand_alone, self.net_graph, set())
+                                                   self.zone_stand_alone, set())
 
                 mem_control.add(veh_id)
-
-        # Determining the updating self.veh_tale and self.net_graph
-        # for k in near_sa.keys():
-            # self.veh_table, self.net_graph = util.update_sa_net_graph(self.veh_table, k, near_sa, self.net_graph)
 
         self.update_cluster(self.veh_table.ids(), configs, zones)
 
@@ -569,8 +556,7 @@ class DataTable:
     def form_net_graph(self):
         for veh_id in self.veh_table.ids():
             if self.veh_table.values(veh_id)['cluster_head'] is False:
-                self.net_graph = util_graph.veh_add_edges(veh_id, self.veh_table,
-                                                          self.bus_table, self.net_graph)
+                self.net_graph = util_graph.veh_add_edges(veh_id, self.veh_table, self.net_graph)
             else:
                 self.net_graph = util_graph.ch_add_edges(veh_id, self.veh_table, self.net_graph)
 

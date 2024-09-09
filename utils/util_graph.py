@@ -6,11 +6,11 @@ __all__ = []
 
 import networkx as nx
 
-def veh_add_edges(veh_id, veh_table, bus_table, net_graph):
+def veh_add_edges(veh_id, veh_table, net_graph):
     """
     :param veh_id:
     :param veh_table:
-    :param bus_table:
+    :param net_graph:
     :return:
     """
     all_nearby = set()
@@ -27,8 +27,9 @@ def veh_add_edges(veh_id, veh_table, bus_table, net_graph):
                      veh_table.values(veh_id)['other_vehs'], veh_table.values(veh_id)['sub_cluster_members'])
 
     for i in all_nearby:
-        if (('veh' in i) and (veh_table.values(i)['primary_ch'] ==
-                             veh_table.values(veh_id)['primary_ch']) and
+        if (('veh' in i) and (veh_table.values(i)['primary_ch'] is not None)
+                and (veh_table.values(i)['primary_ch'] ==
+                     veh_table.values(veh_id)['primary_ch']) and
                 ((veh_table.values(veh_id)['secondary_ch'] != i) or
                  (veh_table.values(i)['secondary_ch'] != veh_id))):
             continue
