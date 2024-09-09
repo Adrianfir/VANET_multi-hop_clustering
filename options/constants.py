@@ -29,7 +29,8 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = 0.5
-        trans_range = 200
+        veh_trans_range = 200
+        bus_trans_range = 800
         start_time = 1600
         iter = 60
         counter = 100
@@ -59,8 +60,12 @@ class Inputs:
                             help='includes data for all seconds')
         parser.add_argument('--alpha', type=float, default=alpha,
                             help='this is the regularization coefficient to change the sie of the zones based on TR')
-        parser.add_argument('--trans_range', type=int, default=trans_range,
-                            help='this is the transmission range considered in this project and it can be up to 2000')
+        parser.add_argument('--veh_trans_range', type=int, default=veh_trans_range,
+                            help='this is the transmission range of vehicles considered in this project and it can '
+                                 'be up to 2000')
+        parser.add_argument('--bus_trans_range', type=int, default=bus_trans_range,
+                            help='this is the transmission range of buses considered in this project and it can '
+                                 'be up to 2000')
         parser.add_argument('--start_time', type=int, default=start_time,
                             help='This is the time that the initial values would be extract from sumo_trace.xml file')
         parser.add_argument('--counter', type=int, default=counter,

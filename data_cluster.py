@@ -562,7 +562,7 @@ class DataTable:
         edge_group = folium.FeatureGroup(name='Graph Edges')
 
         # Add edges to the feature group
-        for edge in G.edges():
+        for edge in self.net_graph.edges():
             start_pos = pos[edge[0]]
             end_pos = pos[edge[1]]
             locations = [start_pos, end_pos]

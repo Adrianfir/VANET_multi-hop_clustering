@@ -30,12 +30,12 @@ if __name__ == "__main__":
         cluster.form_net_graph()
         connection_evaluation = cluster.eval_connections()
         connections.append(connection_evaluation)
-        # cluster.show_graph(configs)
-        # cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/Graph' + str(i))
+        cluster.show_graph(configs)
+        cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
+
     end_time = time.time()
-    # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/',
-    #                     '/Users/pouyafirouzmakan/Desktop/VANET/saved_imgs/', configs.fps)
-    # cluster.show_graph(configs)
+    util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
+                        '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
     cluster.print_table()
     eval_cluster = cluster.eval_cluster(configs)
 
