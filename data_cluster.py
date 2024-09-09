@@ -277,7 +277,7 @@ class DataTable:
                                   self.veh_table.values(m)['trans_range']):
                         # remove 'm' from veh_id which is a CH  as 'm' is away of veh_id
                         if m in self.veh_table.values(veh_id)['cluster_members']:
-                            (self.veh_table, self.bus_table, self.net_graph,
+                            (self.veh_table, self.bus_table,
                              self.stand_alone, self.zone_stand_alone) = (
                                 util.remove_member(m, veh_id, self.veh_table, self.bus_table, config,
                                                    self.stand_alone, self.zone_stand_alone))
