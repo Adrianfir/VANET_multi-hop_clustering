@@ -18,6 +18,7 @@ import sys
 from graph import Graph
 import utils.util as util
 import utils.util_pmc as util_pmc
+import utils.util_graph as util_graph
 import hash
 
 
@@ -89,15 +90,16 @@ class DataTable:
 
             # create the self.net_graph or add the new vertex
             if self.init_count == 1:
-                self.net_graph = Graph(veh.getAttribute('id'), (float(veh.getAttribute('y')),
-                                                                float(veh.getAttribute('x'))
-                                                                )
-                                       )
+                self.net_graph = nx.Graph()
+                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
+                                                                     float(veh.getAttribute('x'))
+                                                                     )
+                                        )
             else:
-                self.net_graph.add_vertex(veh.getAttribute('id'), (float(veh.getAttribute('y')),
-                                                                   float(veh.getAttribute('x'))
-                                                                   )
-                                          )
+                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
+                                                                     float(veh.getAttribute('x'))
+                                                                     )
+                                        )
 
     def update(self, config, zones):
         """
@@ -133,24 +135,16 @@ class DataTable:
                     self.all_chs.add(veh.getAttribute('id'))
             # add the vertex to the graph
             try:
-                self.net_graph.adj_list[veh.getAttribute('id')]['pos'] = (float(veh.getAttribute('y')),
+                self.net_graph.nodes[veh.getAttribute('id')]['pos'] = (float(veh.getAttribute('y')),
                                                                           float(veh.getAttribute('x'))
                                                                           )
-                if 'bus' in veh.getAttribute('id'):
-                    self.net_graph.adj_list[veh.getAttribute('id')]['edges'] = list(self.bus_table. \
-                                                                                    values(veh.getAttribute('id'))[
-                                                                                        'cluster_members'])
-                else:
-                    self.net_graph.adj_list[veh.getAttribute('id')]['edges'] = list(self.veh_table. \
-                                                                                    values(veh.getAttribute('id'))[
-                                                                                        'cluster_members'])
 
             except KeyError:
 
-                self.net_graph.add_vertex(veh.getAttribute('id'), (float(veh.getAttribute('y')),
+                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
                                                                    float(veh.getAttribute('x'))
-                                                                   )
-                                          )
+                                                                     )
+                                        )
         # removing the buses, that have left the understudied area, from self.bus_table and self.zone_buses
         for k in (self.bus_table.ids() - bus_ids):
             temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
@@ -176,7 +170,7 @@ class DataTable:
             self.left_bus[k] = self.bus_table.values(k)
 
             self.bus_table.remove(k)
-            self.net_graph.remove_vertex(k)
+            self.net_graph.remove_node(k)
 
         # removing the vehicles, that have left the understudied area, from self.veh_table and self.zone_vehicles
 
@@ -228,7 +222,7 @@ class DataTable:
             self.left_veh[k] = self.veh_table.values(k)
 
             self.veh_table.remove(k)
-            self.net_graph.remove_vertex(k)
+            self.net_graph.remove_node(k)
 
     def update_cluster(self, veh_ids, config, zones):
 
@@ -454,6 +448,23 @@ class DataTable:
 
         self.update_cluster(self.veh_table.ids(), configs, zones)
 
+    def update_other_connections(self):
+        # finding buses' other_chs
+        # Here the other_vehs must be updated again. Otherwise, the graph would face with some conflicts
+        self.veh_table, self.bus_table = util.other_connections_update(self.veh_table, self.bus_table,
+                                                                       self.zone_ch, self.zone_buses,
+                                                                       self.zone_vehicles)
+
+    def form_net_graph(self):
+        for veh_id in self.veh_table.ids():
+            if self.veh_table.values(veh_id)['cluster_head'] is False:
+                self.net_graph = util_graph.veh_add_edges(veh_id, self.veh_table, self.net_graph)
+            else:
+                self.net_graph = util_graph.ch_add_edges(veh_id, self.veh_table, self.net_graph)
+
+        for bus_id in self.bus_table.ids():
+            self.net_graph = util_graph.bus_add_edges(bus_id, self.bus_table, self.net_graph)
+
     def eval_cluster(self, configs):
         total_clusters = 0
         n_sav_ch = 0  # number of vehicles that are allways ch or stand-alone (never experiences being a cm)
@@ -495,20 +506,29 @@ class DataTable:
             total_clusters += one_veh
         return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
 
+    def eval_connections(self):
+        n = 0      # this would return the minimum number of path needed to connect all the clusters
+        investigated = set()
+        for i in self.all_chs:
+            investigated.add(i)
+            temp_table = self.veh_table if 'veh' in i else self.bus_table
+            if temp_table.values(i)['cluster_members'] != set():
+                for j in (self.all_chs - temp_table.values(i)['other_chs'] -
+                          temp_table.values(i)['gate_chs'] - investigated):
+                    try:
+                        nx.shortest_path(self.net_graph, source=i, target=j)
+                    except nx.exception.NetworkXNoPath:
+                        n += 1
+        return n
+
     def show_graph(self, configs):
         """
         this function will illustrate the self.net_graph
         :return: Graph
         """
-        G = nx.Graph()
-        # Add nodes and edges with coordinates to the networkx graph
-        for vertex, data in self.net_graph.adj_list.items():
-            G.add_node(vertex, pos=data['pos'])
-            for edge in list(set(data['edges'])):
-                G.add_edge(vertex, edge)
 
         # Extract positions from node attributes
-        pos = nx.get_node_attributes(G, 'pos')
+        pos = nx.get_node_attributes(self.net_graph, 'pos')
 
         # Create a folium map centered around the first node
         self.map = folium.Map(location=configs.center_loc, zoom_start=configs.map_zoom, tiles='cartodbpositron',
