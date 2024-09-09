@@ -16,47 +16,57 @@ def veh_add_edges(veh_id, veh_table, bus_table, net_graph):
     all_nearby = set()
     if ((veh_table.values(veh_id)['primary_ch'] is not None) and
             (veh_table.values(veh_id)['secondary_ch'] is None)):
-        net_graph.add_edges_from((veh_id, veh_table.values(veh_id)['primary_ch']),
-                                 (veh_table.values(veh_id)['primary_ch'], veh_id))
+        net_graph.add_edges_from([(veh_id, veh_table.values(veh_id)['primary_ch']),
+                                 (veh_table.values(veh_id)['primary_ch'], veh_id)])
     elif ((veh_table.values(veh_id)['primary_ch'] is not None) and
             (veh_table.values(veh_id)['secondary_ch'] is not None)):
-        net_graph.add_edges_from((veh_id, veh_table.values(veh_id)['secondary_ch']),
-                                 (veh_table.values(veh_id)['secondary_ch'], veh_id))
+        net_graph.add_edges_from([(veh_id, veh_table.values(veh_id)['secondary_ch']),
+                                 (veh_table.values(veh_id)['secondary_ch'], veh_id)])
 
-    all_nearby.union(all_nearby, veh_table.valeus(veh_id)['other_chs'],
-                     veh_table.valeus(veh_id)['other_vehs'], veh_table.valeus(veh_id)['sub_members'])
+    all_nearby.union(all_nearby, veh_table.values(veh_id)['other_chs'],
+                     veh_table.values(veh_id)['other_vehs'], veh_table.values(veh_id)['sub_cluster_members'])
 
     for i in all_nearby:
-        temp_table = veh_table if 'veh' in i else bus_table
-        if (('veh' in i) and (veh_table.values(veh_id)['primary_ch'] ==
+        if (('veh' in i) and (veh_table.values(i)['primary_ch'] ==
                              veh_table.values(veh_id)['primary_ch']) and
                 ((veh_table.values(veh_id)['secondary_ch'] != i) or
                  (veh_table.values(i)['secondary_ch'] != veh_id))):
             continue
         else:
-            net_graph.add_edges_from((veh_id, i),
-                                     (i, veh_id))
+            net_graph.add_edges_from([(veh_id, i),
+                                     (i, veh_id)])
     return net_graph
 
-def ch_add_edges(veh_id, veh_table, bus_table, net_graph):
+def ch_add_edges(veh_id, veh_table, net_graph):
     """
 
     :param veh_id:
     :param veh_table:
-    :param bus_table:
+    :param net_graph:
     :return:
     """
     all_nearby = set()
-    all_nearby.union(all_nearby, veh_table.valeus(veh_id)['other_chs'],
-                     veh_table.valeus(veh_id)['other_vehs'], veh_table.valeus(veh_id)['cluster_members'])
 
+    all_nearby.union(all_nearby, veh_table.values(veh_id)['other_chs'],
+                     veh_table.values(veh_id)['other_vehs'], veh_table.values(veh_id)['cluster_members'])
+    for i in all_nearby:
+        net_graph.add_edges_from([(veh_id, i),
+                                 (i, veh_id)])
 
-def bus_add_edges(bus_id, veh_table, bus_table, net_graph):
+    return net_graph
+def bus_add_edges(bus_id, bus_table, net_graph):
     """
 
     :param bus_id:
-    :param veh_table:
     :param bus_table:
+    :param net_graph:
     :return:
     """
-    return True
+    all_nearby = set()
+
+    all_nearby.union(all_nearby, bus_table.values(bus_id)['other_chs'],
+                     bus_table.values(bus_id)['other_vehs'], bus_table.values(bus_id)['cluster_members'])
+    for i in all_nearby:
+        net_graph.add_edges_from([(bus_id, i),
+                                 (i, bus_id)])
+    return net_graph

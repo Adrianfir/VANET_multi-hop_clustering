@@ -566,6 +566,17 @@ class DataTable:
                                                                        self.zone_ch, self.zone_buses,
                                                                        self.zone_vehicles)
 
+    def form_net_graph(self):
+        for veh_id in self.veh_table.ids():
+            if self.veh_table.values(veh_id)['cluster_head'] is False:
+                self.net_graph = util_graph.veh_add_edges(veh_id, self.veh_table,
+                                                          self.bus_table, self.net_graph)
+            else:
+                self.net_graph = util_graph.ch_add_edges(veh_id, self.veh_table, self.net_graph)
+
+        for bus_id in self.bus_table.ids():
+            self.net_graph = util_graph.bus_add_edges(bus_id, self.bus_table, self.net_graph)
+
 
     def eval_cluster(self, configs):
         total_clusters = 0
@@ -607,17 +618,6 @@ class DataTable:
             one_veh += np.divide(summing, total_length * in_area_time)
             total_clusters += one_veh
         return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
-
-    def form_net_graph(self):
-        all_veh_ids = self.veh_table.ids()
-        for veh_id in self.veh_table.ids():
-            if self.veh_table.values(veh_id)['cluster_had'] is False:
-                self.net_graph = util_graph.veh_add_edges(veh_id, self.veh_table,
-                                                          self.bus_table, self.net_graph)
-            if self.veh_table.values(veh_id)['cluster_had'] is True:
-                self.net_graph = util_graph.ch_add_edges(veh_id, self.veh_table,
-                                                          self.bus_table, self.net_graph)
-        return True
 
     def eval_connections(self):
         n = 0      # this would return the minimum number of path needed to connect all the clusters
