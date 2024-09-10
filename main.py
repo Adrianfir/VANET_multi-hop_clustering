@@ -43,7 +43,7 @@ if __name__ == "__main__":
     print(f'stability_evaluation: {cluster.eval_cluster(configs)}')
     print(f'connection_evaluation: {connections}')
     print('\n')
-    print('chs: ', cluster.all_chs)
+    print(f'chs: {len(cluster.all_chs)}, {cluster.all_chs}')
     print('stand_alones: ', cluster.stand_alone)
     print("execution time: ", end_time - start_time)
     print(f'all the edges: \n{cluster.net_graph.edges()}')
