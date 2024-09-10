@@ -601,7 +601,11 @@ class DataTable:
                         else:
                             self.edge_color = 'gray'
                     else:
-                        self.edge_color = 'lightblue'
+                        if (self.veh_table.values(edge[1])['secondary_ch'] == edge[0]) \
+                            or (self.veh_table.values(edge[0])['secondary_ch'] == edge[1]):
+                            self.edge_color = 'lightgreen'
+                        else:
+                            self.edge_color = 'lightblue'
 
             folium.PolyLine(locations=locations, color=self.edge_color).add_to(edge_group)
 
