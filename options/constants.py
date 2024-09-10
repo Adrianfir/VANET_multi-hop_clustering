@@ -33,7 +33,7 @@ class Inputs:
         bus_trans_range = 800
         start_time = 1600
         iter = 60
-        counter = 4
+        counter = 10
         priority_counter = 1
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
