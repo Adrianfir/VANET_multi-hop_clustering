@@ -3,13 +3,11 @@ This is the utils file including the small functions
 """
 __author__: str = "Pouya 'Adrian' Firouzmakan"
 __all__ = [
-    'add_member', 'add_sub_member', 'choose_ch', 'choose_multihop_ch', 'det_befit', 'det_beta',
-    'det_border_speed_count', 'det_buses_other_ch', 'det_con_factor', 'det_dist', 'det_linkage_fac',
-    'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca', 'image_num', 'initiate_new_bus',
-    'initiate_new_veh', 'mac_address', 'make_slideshow', 'middle_zone', 'other_connections_update',
-    'presence', 'priority_clusters', 'remove_member', 'remove_sub_member', 'save_img', 'set_ch',
-    'set_ch_to_veh', 'sumo_net_info', 'update_sai', 'update_bus_table', 'sumo_net_info', 'update_sa_net_graph',
-    'update_veh_table'
+    'add_member', 'add_sub_member', 'choose_ch', 'choose_multihop_ch', 'det_beta', 'det_buses_other_ch', 'det_dist',
+    'det_near_ch', 'det_near_sa', 'det_pot_ch', 'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address',
+    'make_slideshow', 'middle_zone', 'other_connections_update', 'presence', 'priority_clusters', 'remove_member',
+    'remove_sub_member', 'save_img', 'set_ch', 'set_ch_to_veh', 'sumo_net_info', 'update_bus_table', 'sumo_net_info',
+    'update_sa_net_graph', 'update_veh_table'
 ]
 
 import numpy as np
@@ -173,30 +171,15 @@ def add_member(ch_id, bus_table,
     veh_table.values(veh_id)['priority_ch'] = ch_id
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
     # bus_candidates.remove(bus_ch)
-    veh_table.values(veh_id)['other_chs']. \
-        update(veh_table.values(veh_id)['other_chs'].union(bus_candidates))
-    veh_table.values(veh_id)['other_chs']. \
-        update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-    if ch_id in veh_table.values(veh_id)['other_chs']:
-        veh_table.values(veh_id)['other_chs'].remove(ch_id)
+
     if 'bus' in ch_id:
         bus_table.values(ch_id)['cluster_members'].add(veh_id)
-        bus_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
-        bus_table.values(ch_id)['gate_chs']. \
-            update(bus_table.values(ch_id)['gate_chs'].
-                   union(veh_table.values(veh_id)['other_chs']))
     else:
         veh_table.values(ch_id)['cluster_members'].add(veh_id)
-        veh_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
-        veh_table.values(ch_id)['gate_chs']. \
-            update(veh_table.values(ch_id)['gate_chs'].
-                   union(veh_table.values(veh_id)['other_chs']))
+
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
-    veh_table.values(veh_id)['other_vehs'] = other_vehs
-    net_graph.add_edge(ch_id, veh_id)
-    for other_ch in veh_table.values(veh_id)['other_chs']:
-        net_graph.add_edge(other_ch, veh_id)
+
     return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
             net_graph)
@@ -259,10 +242,7 @@ def add_sub_member(ch_id, bus_table,
         # and cluster_members of the CH
         # veh_table.values(ch_id)['cluster_members'].add(veh_id)
         veh_table.values(ch_id)['sub_cluster_members'].add(veh_id)
-        veh_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
-        veh_table.values(ch_id)['gate_chs']. \
-            update(veh_table.values(ch_id)['gate_chs'].
-                   union(veh_table.values(veh_id)['other_chs']))
+
     else:
         if ch_id in bus_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
             # the veh_ch might not be in the bus_candidates
@@ -271,21 +251,9 @@ def add_sub_member(ch_id, bus_table,
         # and cluster_members of the CH
         # bus_table.values(ch_id)['cluster_members'].add(veh_id)
         bus_table.values(ch_id)['sub_cluster_members'].add(veh_id)
-        bus_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
-        bus_table.values(ch_id)['gate_chs']. \
-            update(bus_table.values(ch_id)['gate_chs'].
-                   union(veh_table.values(veh_id)['other_chs']))
 
-    veh_table.values(veh_id)['other_chs']. \
-        update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
-    veh_table.values(veh_id)['other_chs']. \
-        update(veh_table.values(veh_id)['other_chs'].union(bus_candidates))
     stand_alone.remove(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
-    veh_table.values(veh_id)['other_vehs'] = other_vehs
-    net_graph.add_edge(sub_ch_id, veh_id)
-    for other_ch in veh_table.values(veh_id)['other_chs']:
-        net_graph.add_edge(other_ch, veh_id)
 
     return (bus_table, veh_table,
             stand_alone, zone_stand_alone,
@@ -858,7 +826,6 @@ def update_veh_table(veh, veh_table, zone_id, understudied_area, zones, config,
                     lane_id = match.group(1)
             veh_table.values(veh.getAttribute('id'))['lane']['id'] = lane_id
             veh_table.values(veh.getAttribute('id'))['lane']['timer'] = 0
-        veh_table.values(veh.getAttribute('id'))['sai'] = update_sai(veh_table, veh.getAttribute('id'))
         veh_table.values(veh.getAttribute('id'))['prev_long'] = veh_table.values(veh.getAttribute('id'))['long']
         veh_table.values(veh.getAttribute('id'))['prev_lat'] = veh_table.values(veh.getAttribute('id'))['lat']
         veh_table.values(veh.getAttribute('id'))['long'] = float(veh.getAttribute('x'))
@@ -922,98 +889,6 @@ def det_near_sa(veh_id, veh_table,
     return np.array(speed_rel).mean(), result
 
 
-def det_befit(veh_table, veh_id,
-              sumo_edges, sumo_nodes, config):
-    """
-
-    :param veh_table: self.veh_table
-    :param sumo_edges: info related to roads in sumo
-    :param sumo_nodes: info related to nodes in sumo
-    :param veh_id: vehicle id
-    :param config: config
-    :return: the BF_v for making comparison
-    """
-    # T_leave
-    road = veh_table.values(veh_id)['lane']['id']
-    if (":" in road) or ('cluster' in road):
-        return 0.0001  # because according to data, such edges are too short to be considered
-    t = veh_table.values(veh_id)['lane']['timer']  # amount of time to cover distance "d"
-    l = sumo_edges[road]['length']  # Length of the road segment
-    from_node = sumo_edges[road]['from']
-    if 'cluster' in from_node:  # some nodes are like "cluster_709104099_9493129504" -> 709104099 is good
-        match = re.search(r'\d+', from_node)
-
-        if match:
-            from_node = match.group()
-    d = hs.haversine((veh_table.values(veh_id)['lat'], veh_table.values(veh_id)['long']),
-                     (sumo_nodes[from_node]['lat'], sumo_nodes[from_node]['long']),
-                     unit=hs.Unit.METERS)  # Distance covered by a vehicle on that segment
-    t_leave = (((l - d) / d) * t) / (
-            l / veh_table.values(veh_id)['speed'])  # l/veh_table.values('veh_id)')['speed'] is for normalization
-
-    # Sai_v
-    sai_v = veh_table.values(veh_id)['sai'] / (
-            1 + (config.iter * 0.01))  # (1 + (config.iter*0.01)) is for normalization
-
-    # Degree_n
-    if len(veh_table.values(veh_id)['other_vehs']) > 0:
-        degree_n = update_degree_n(veh_table, veh_id) / len(veh_table.values(veh_id)['other_vehs'])
-    else:
-        degree_n = 0
-
-    return t_leave + sai_v + degree_n
-
-
-def det_con_factor(veh_table, veh_id):
-    """
-
-    :param veh_table: self.veh_table
-    :param veh_id: vehicle id
-    :return: returns te connectivity factor for making comparison
-    """
-    cf_v = det_border_speed_count(veh_table, veh_id) + det_linkage_fac(veh_table, veh_id)
-    return cf_v
-
-
-def update_sa_net_graph(veh_table, k, near_sa, net_graph):
-    """
-    this function is used to determine chs among the stand-alones to k which is ch too
-    :param veh_table:
-    :param k:
-    :param near_sa:
-    :param net_graph:
-    :return: chs among the stand-alones to k which is ch too
-    """
-    for j in near_sa[k]:
-        if veh_table.values(k)['cluster_head'] + veh_table.values(j)['cluster_head'] > 0:
-            dist = det_dist(k, veh_table, j, veh_table)
-
-            if dist < min(veh_table.values(k)['cluster_head'],
-                          veh_table.values(j)['cluster_head']):
-                if veh_table.values(k)['cluster_head'] + veh_table.values(j)['cluster_head'] == 2:
-                    veh_table.values(k)['other_chs'].add(j)
-                    veh_table.values(j)['other_chs'].add(k)
-                    net_graph.add_edge(k, j)
-
-                elif (veh_table.values(k)['cluster_head'] is True) and \
-                        (veh_table.values(j)['cluster_head'] is False):
-
-                    if veh_table.values(j)['primary_ch'] != k:
-                        veh_table.values(j)['other_chs'].add(k)
-                        veh_table.values(veh_table.values(j)['primary_ch'])['gates'][j].add(k)
-                        veh_table.values(veh_table.values(j)['primary_ch'])['gate_chs'].add(k)
-
-                elif (veh_table.values(j)['cluster_head'] is True) and \
-                        (veh_table.values(k)['cluster_head'] is False):
-
-                    if veh_table.values(k)['primary_ch'] != j:
-                        veh_table.values(k)['other_chs'].add(j)
-                        veh_table.values(veh_table.values(k)['primary_ch'])['gates'][k].add(j)
-                        veh_table.values(veh_table.values(k)['primary_ch'])['gate_chs'].add(j)
-
-    return veh_table, net_graph
-
-
 def det_dist(id1, table1, id2, table2):
     """
 
@@ -1050,27 +925,6 @@ def det_pot_ch(veh_id, near_sa, n_near_sa):
         else:
             continue
     return pot_ch
-
-
-def det_pot_ch_dsca(veh_id, near_sa, n_near_sa, sf_factor):
-    """
-
-    :param veh_id:
-    :param near_sa: dictionary shows the SAVs and their nearby SAVs
-    :param n_near_sa: number of stand_alone vehicles to veh_id
-    :return: potential SAVs nearby veh_id that can be CH
-    """
-    pot_ch = veh_id
-    for mem in near_sa[veh_id]:
-        if mem in near_sa.keys():
-            if sf_factor[mem] > sf_factor[pot_ch]:
-                pot_ch = mem
-            else:
-                continue
-        else:
-            continue
-    return pot_ch
-
 
 def save_img(m, zoom_out_value, name):
     """
@@ -1189,73 +1043,6 @@ def sumo_net_info(sumo_edge, sumo_node):
                                               'long': float(node.getAttribute('lon'))
                                               }
     return edge_info, node_info
-
-
-def update_sai(veh_table, veh_id):
-    """
-
-    :param veh_table: self.veh_table
-    :param veh_id: vehicle id
-    :return: This function returns updated sai_v for each vehicle
-    """
-    neighbors_speed = []
-    dif_speed = []
-    if len(veh_table.values(veh_id)['other_vehs']) == 0:
-        return veh_table.values(veh_id)['sai']
-    for i in veh_table.values(veh_id)['other_vehs']:
-        neighbors_speed.append(veh_table.values(i)['speed'])
-        dif_speed.append(abs(veh_table.values(veh_id)['speed'] - veh_table.values(i)['speed']))
-    delta_s = np.std(dif_speed)
-    if abs(veh_table.values(veh_id)['speed'] - np.average(neighbors_speed)) <= delta_s:
-        return veh_table.values(veh_id)['sai'] + 0.01
-    elif abs(veh_table.values(veh_id)['speed'] - np.average(neighbors_speed)) > delta_s:
-        return veh_table.values(veh_id)['sai'] - 0.01
-
-
-def update_degree_n(veh_table, veh_id):
-    """
-
-    :param veh_table: self.veh_table
-    :param veh_id: vehicle id
-    :return: This function returns updated sai_v for each vehicle
-    """
-    neighbors_speed = []
-    dif_speed = []
-    degree_n = 0
-    if len(veh_table.values(veh_id)['other_vehs']) == 0:
-        return 0
-    for i in veh_table.values(veh_id)['other_vehs']:
-        neighbors_speed.append(veh_table.values(i)['speed'])
-        dif_speed.append(abs(veh_table.values(veh_id)['speed'] - veh_table.values(i)['speed']))
-    delta_s = np.std(dif_speed)
-    for k in neighbors_speed:
-        if abs(k - np.average(neighbors_speed)) <= delta_s:
-            degree_n += 1
-    return degree_n
-
-
-def det_border_speed_count(veh_table, veh_id):
-    """
-
-    :param veh_table: self.veh_table
-    :param veh_id: vehicle id
-    :return: This function returns BS_count for each vehicle to make comparison
-    """
-    if len(veh_table.values(veh_id)['other_vehs']) == 0:
-        return 0
-    bs_count = 0
-    for i in veh_table.values(veh_id)['other_vehs']:
-        if abs(veh_table.values(veh_id)['speed'] - veh_table.values(i)['speed']) <= 5:
-            bs_count += 1
-    return bs_count
-
-
-def det_linkage_fac(veh_table, veh_id):
-    d_i = 0
-    d = len(veh_table.values(veh_id)['other_vehs'])
-    for i in veh_table.values(veh_id)['other_vehs']:
-        d_i += len(veh_table.values(i)['other_vehs'])
-    return (0.5 * d) + (0.5 * d_i)
 
 def other_connections_update(veh_table, bus_table, zone_ch,
                              zone_buses, zone_vehicles):

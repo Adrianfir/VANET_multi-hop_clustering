@@ -443,8 +443,6 @@ class DataTable:
 
         
         # Determining the updating self.veh_tale and self.net_graph
-        for k in near_sa.keys():
-            self.veh_table, self.net_graph = util.update_sa_net_graph(self.veh_table, k, near_sa, self.net_graph)
 
         self.update_cluster(self.veh_table.ids(), configs, zones)
 
