@@ -78,8 +78,8 @@ def calculate_llt(m, n, veh_table, bus_table):
     else:
         table_n = veh_table
 
-    delta_v_x = table_m.values(m)['prev_speed'] - table_n.values(n)['prev_speed']
-    delta_v_y = table_m.values(m)['speed'] - table_n.values(n)['speed']
+    delta_v_x = table_m.values(m)['prev_speed'] - table_n.values(n)['prev_speed'] + 0.001
+    delta_v_y = table_m.values(m)['speed'] - table_n.values(n)['speed'] + 0.001
 
     delta_p_x = hs.haversine((table_m.values(m)["prev_lat"],
                               table_m.values(m)["prev_long"]),
@@ -108,7 +108,8 @@ def calculate_pri(m, n, veh_table, bus_table, zone_buses, zone_vehicle, weights)
     first_part = alpha/(calculate_nfollow(n, veh_table, bus_table,
                                            zone_buses, zone_vehicle) + 0.0001)
     second_part = beta * calculate_etx(m, n)
-    third_part = gama/(calculate_llt(m, n, veh_table, bus_table) + 0.0001)
+    llt = calculate_llt(m, n, veh_table, bus_table)
+    third_part = gama/(llt+ 0.0001)
     pri = first_part + second_part + third_part
     return pri
 

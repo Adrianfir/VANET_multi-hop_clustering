@@ -7,7 +7,7 @@ __all__ = [
     'det_near_ch', 'det_near_sa', 'det_pot_ch', 'image_num', 'initiate_new_bus', 'initiate_new_veh', 'mac_address',
     'make_slideshow', 'middle_zone', 'other_connections_update', 'presence', 'priority_clusters', 'remove_member',
     'remove_sub_member', 'save_img', 'set_ch', 'set_ch_to_veh', 'sumo_net_info', 'update_bus_table', 'sumo_net_info',
-    'update_sa_net_graph', 'update_veh_table'
+    'update_veh_table'
 ]
 
 import numpy as np
@@ -296,7 +296,6 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     if mem_stays is True:
         stand_alone.add(mem)
         zone_stand_alone[veh_table.values(mem)['zone']].add(mem)
-    net_graph.remove_edge(ch_id, mem)
     veh_table.values(mem)['primary_ch'] = None
     veh_table.values(mem)['secondary_ch'] = None
     veh_table.values(mem)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
@@ -333,7 +332,6 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
         stand_alone.add(sub_mem_id)
         zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
     veh_table.values(sub_ch_id)['sub_cluster_members'].remove(sub_mem_id)
-    net_graph.remove_edge(sub_mem_id, sub_ch_id)
     if 'bus' in ch_id:
         bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
     else:
@@ -1056,13 +1054,18 @@ def other_connections_update(veh_table, bus_table, zone_ch,
     :return:
     """
     for veh_id in veh_table.ids():
+        veh_table.values(veh_id)['other_vehs'] = set()
+        veh_table.values(veh_id)['other_chs'] = set()
+        veh_table.values(veh_id)['gate_chs'] = set()
+        veh_table.values(veh_id)['gates'] = dict()
+
         (bus_candidates, ch_candidates,
          sub_ch_candidates, other_vehs) = det_near_ch(veh_id, veh_table, bus_table, zone_buses, zone_vehicles)
 
         if veh_table.values(veh_id)['primary_ch'] is not None:
             ch = veh_table.values(veh_id)['primary_ch']
             secondary_ch = veh_table.values(veh_id)['secondary_ch']
-            veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates) - {ch}
+            veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates)
             veh_table.values(veh_id)['other_vehs'] = other_vehs - {secondary_ch} - {veh_id}
             if 'veh' in ch:
                 veh_table.values(ch)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
@@ -1072,7 +1075,7 @@ def other_connections_update(veh_table, bus_table, zone_ch,
                 bus_table.values(ch)['gate_chs'] = veh_table.values(veh_id)['other_chs']
 
         elif veh_table.values(veh_id)['cluster_head'] is True:
-            veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates)
+            veh_table.values(veh_id)['other_chs'] = bus_candidates.union(ch_candidates) - {veh_id}
             veh_table.values(veh_id)['other_vehs'] = (other_vehs - veh_table.values(veh_id)['cluster_members'] -
                                                       veh_table.values(veh_id)['sub_cluster_members']) - {veh_id}
 
@@ -1080,6 +1083,10 @@ def other_connections_update(veh_table, bus_table, zone_ch,
             veh_table.values(veh_id)['other_vehs'] = other_vehs - {veh_id}
 
     for bus in bus_table.ids():
+        bus_table.values(bus)['other_vehs'] = set()
+        bus_table.values(bus)['other_chs'] = set()
+        bus_table.values(bus)['gate_chs'] = set()
+        bus_table.values(bus)['gates'] = dict()
         bus_other_vehs = set()
         neigh_veh = list()
 

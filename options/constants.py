@@ -37,7 +37,7 @@ class Inputs:
         priority_counter = 100
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
-        fps = 10
+        fps = 5
         weights_s = np.array([0.7, 0, 0.3])       # direction's angle, speed, distance for single-hop
         weights_m = np.array([0.5, 0.0, 0.5])       # direction's angle, speed, distance for multi-hop
 

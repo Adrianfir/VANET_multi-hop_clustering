@@ -110,6 +110,7 @@ class DataTable:
         self.time += 1
         bus_ids = set()
         veh_ids = set()
+        self.net_graph.remove_edges_from(self.net_graph.edges())
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
             zone_id = zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
@@ -391,6 +392,7 @@ class DataTable:
 
         all_vehs = set()
         all_vehs = all_vehs.union(bus_candidates, ch_candidates, sub_ch_candidates)
+
         ch, ef = util_pmc.choose_ch(veh_id, self.veh_table, self.bus_table, all_vehs,
                                     self.zone_buses, self.zone_vehicles, config.weights_pcm)
 
