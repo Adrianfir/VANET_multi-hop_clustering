@@ -95,9 +95,13 @@ def calculate_llt(m, n, veh_table, bus_table):
 
     d = min(table_m.values(m)['trans_range'], table_n.values(n)['trans_range'])
 
-    llt = ((np.sqrt(abs(np.square(d) * (np.square(delta_v_x) + np.square(delta_v_y)) -
+    llt = (
+            (np.sqrt(abs(np.square(d) * (np.square(delta_v_x) + np.square(delta_v_y)) -
                     np.square((delta_p_x * delta_v_y) - (delta_p_y * delta_v_x))) -
-            ((delta_p_x * delta_v_x) - (delta_p_y * delta_v_y)))) / (np.square(delta_v_x) + np.square(delta_v_y)))
+            ((delta_p_x * delta_v_x) - (delta_p_y * delta_v_y)))+0.0001) / (np.square(delta_v_x) + np.square(delta_v_y)
+                                                                     + 0.0001
+                                                                            )
+           )
     return llt
 
 

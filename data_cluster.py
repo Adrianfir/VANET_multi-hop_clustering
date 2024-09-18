@@ -380,7 +380,7 @@ class DataTable:
              sub_ch_candidates, other_vehs) = util.det_near_ch(veh_id, self.veh_table, self.bus_table,
                                                                self.zone_buses, self.zone_vehicles)
 
-            if (len(bus_candidates) + len(ch_candidates) + len(sub_ch_candidates)) != 0:
+            if (len(bus_candidates) + len(ch_candidates) + len(sub_ch_candidates)) > 0:
 
                 self.pmc(veh_id, config, bus_candidates,
                          ch_candidates, sub_ch_candidates, other_vehs)
