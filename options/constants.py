@@ -13,12 +13,12 @@ import xml.dom.minidom
 class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
-        trace_path = str(pathlib.Path(__file__).parent.parent.absolute().
-                         joinpath('final_data_Richmondhill', 'sumoTrace_no_bus_and_rsu.xml'))
-        sumo_edge_path = str(pathlib.Path(__file__).parent.parent.absolute().
-                             joinpath('final_data_Richmondhill', 'osm.net.xml'))
-        sumo_node_path = str(pathlib.Path(__file__).parent.parent.absolute().
-                             joinpath('final_data_Richmondhill', 'osm_bbox.osm.xml'))
+        trace_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
+                         joinpath('multi-hop_data_Richmondhill', 'sumoTrace.xml'))
+        sumo_edge_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
+                             joinpath('multi-hop_data_Richmondhill', 'osm.net.xml'))
+        sumo_node_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
+                             joinpath('multi-hop_data_Richmondhill', 'osm_bbox.osm.xml'))
         sumo_trace = xml.dom.minidom.parse(trace_path)
         sumo_edge = xml.dom.minidom.parse(sumo_edge_path)
         sumo_node = xml.dom.minidom.parse(sumo_node_path)
@@ -28,18 +28,18 @@ class Inputs:
                     min_long=-79.540771,
                     max_lat=44.012923,
                     max_long=-79.238069)
-        alpha = 0.5
-        veh_trans_range = 200
+        alpha = 0.6
+        veh_trans_range = 300
         bus_trans_range = 800
         start_time = 1600
         iter = 60
-        counter = 10
-        priority_counter = 1
+        counter = 4
+        priority_counter = 4
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 5
         weights_s = np.array([0.7, 0.0, 0.3])       # direction's angle, speed, distance for single-hop
-        weights_m = np.array([0.8, 0.0, 0.2])       # direction's angle, speed, distance for multi-hop
+        weights_m = np.array([0.5, 0.0, 0.5])       # direction's angle, speed, distance for multi-hop
 
         parser = argparse.ArgumentParser()
         parser.add_argument('--area', type=dict, default=area,

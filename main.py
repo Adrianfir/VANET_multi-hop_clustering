@@ -30,18 +30,18 @@ if __name__ == "__main__":
         cluster.form_net_graph()
         connection_evaluation = cluster.eval_connections()
         connections.append(connection_evaluation)
-        cluster.show_graph(configs)
-        cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
+        # cluster.show_graph(configs)
+        # cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
     #
     end_time = time.time()
-    util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
-                        '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
+    # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
+    #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
     cluster.print_table()
     print(f'stability_evaluation: {cluster.eval_cluster(configs)}')
-    print(f'connection_evaluation: {connections}')
+    print(f'connection_evaluation: {sum(connections)/len(connections)}->{connections}')
     print('\n')
-    print('chs: ', cluster.all_chs)
-    print('stand_alones: ', cluster.stand_alone)
+    print(f'chs: {len(cluster.all_chs)}->{cluster.all_chs}')
+    print(f'stand_alones: {len(cluster.stand_alone)}->{cluster.stand_alone}')
     print("execution time: ", end_time - start_time)
     print(f'all the edges: \n{cluster.net_graph.edges()}')
 
