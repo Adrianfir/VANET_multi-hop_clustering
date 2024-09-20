@@ -28,7 +28,7 @@ if __name__ == "__main__":
         cluster.stand_alones_cluster(configs, area_zones)
         cluster.update_other_connections()
         cluster.form_net_graph()
-        connection_evaluation = cluster.eval_connections()
+        connection_evaluation = cluster.connected_components()
         connections.append(connection_evaluation)
         # cluster.show_graph(configs)
         # cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
