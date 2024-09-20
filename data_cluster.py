@@ -60,6 +60,7 @@ class DataTable:
         self.init_count = 0  # this counter is just for defining the self.net_graph for the very first time
         self.edge_color = ''
         self.sumo_edges, self.sumo_nodes = util.sumo_net_info(config.sumo_edge, config.sumo_node)
+        self.ch_net = None
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
             self.init_count += 1

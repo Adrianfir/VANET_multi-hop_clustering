@@ -12,6 +12,8 @@ from configs.config import Configs
 from zonex import ZoneID
 import utils.util as util
 import re
+import networkx as nx
+import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     configs = Configs().config
@@ -37,6 +39,8 @@ if __name__ == "__main__":
     # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
     #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
     cluster.print_table()
+
+    nx.draw(cluster.ch_net, with_labels=False)
     print(f'stability_evaluation: {cluster.eval_cluster(configs)}')
     print(f'connection_evaluation: {sum(connections)/len(connections)}->{connections}')
     print('\n')
@@ -44,4 +48,5 @@ if __name__ == "__main__":
     print(f'stand_alones: {len(cluster.stand_alone)}->{cluster.stand_alone}')
     print("execution time: ", end_time - start_time)
     print(f'all the edges: \n{cluster.net_graph.edges()}')
+    plt.show()
 
