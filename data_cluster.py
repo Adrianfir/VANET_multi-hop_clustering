@@ -146,7 +146,8 @@ class DataTable:
                                                                      )
                                         )
         # removing the buses, that have left the understudied area, from self.bus_table and self.zone_buses
-        for k in (self.bus_table.ids() - bus_ids):
+        temp_left_buses = self.bus_table.ids() - bus_ids
+        for k in temp_left_buses:
             temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
             for m in temp_cluster_members:
                 if m in self.bus_table.values(k)['cluster_members']:  # because m is might be removed
@@ -174,7 +175,8 @@ class DataTable:
 
         # removing the vehicles, that have left the understudied area, from self.veh_table and self.zone_vehicles
 
-        for k in (self.veh_table.ids() - veh_ids):
+        temp_left_vehs = self.veh_table.ids() - veh_ids
+        for k in temp_left_vehs:
             if self.veh_table.values(k)['cluster_head'] is True:
                 temp_cluster_members = self.veh_table.values(k)['cluster_members'].copy()
                 for m in temp_cluster_members:
