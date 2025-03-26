@@ -14,11 +14,11 @@ class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
         trace_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                         joinpath('traffic_data', 'final_data_Richmondhill_largesize', 'sumoTrace.xml'))
+                         joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'sumoTrace.xml'))
         sumo_edge_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                             joinpath('traffic_data', 'final_data_Richmondhill_largesize', 'osm.net.xml'))
+                             joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'osm.net.xml'))
         sumo_node_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                             joinpath('traffic_data', 'final_data_Richmondhill_largesize', 'osm_bbox.osm.xml'))
+                             joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'osm_bbox.osm.xml'))
         sumo_trace = xml.dom.minidom.parse(trace_path)
         sumo_edge = xml.dom.minidom.parse(sumo_edge_path)
         sumo_node = xml.dom.minidom.parse(sumo_node_path)
@@ -34,7 +34,7 @@ class Inputs:
         start_time = 1600
         iter = 60
         counter = 4
-        priority_counter = 4
+        priority_counter = 2
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 5

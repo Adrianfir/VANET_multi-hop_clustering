@@ -20,7 +20,7 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     configs = Configs().config
 
-    dif_tr = [300, ]
+    dif_tr = [200, 300]
     ########################### Define different weights
     # Define the size of each list and the step increment
     list_size = 3
