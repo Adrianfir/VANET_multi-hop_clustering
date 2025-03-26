@@ -84,7 +84,7 @@ if __name__ == "__main__":
 
             out_put = pd.concat([out_put, new_row.to_frame().T], ignore_index=True)
 
-        out_put.to_csv('results/' + str(configs.veh_trans_range) + 'no_RSU.csv')
+        out_put.to_csv('results/' + str(configs.veh_trans_range) + 'no_rsu.csv')
         end_time = time.time()
         print("execution time: ", end_time - start_time)
 
