@@ -45,5 +45,5 @@ if __name__ == "__main__":
     print(f'chs: {len(cluster.all_chs)}->{cluster.all_chs}')
     print(f'stand_alones: {len(cluster.stand_alone)}->{cluster.stand_alone}')
     print("execution time: ", end_time - start_time)
-    print(f'all the edges: \n{cluster.net_graph.edges()}')
+    # print(f'all the edges: \n{cluster.net_graph.edges()}')
 
