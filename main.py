@@ -18,18 +18,28 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     configs = Configs().config
 
-    area_zones = ZoneID(configs)  # This is a hash table including all zones and their max and min lat and longs
-    area_zones.zones()
+    configs.alpha = 0.3
+    area_zone_mic = ZoneID(configs)
+    area_zone_mic.zones()
+    configs.alpha = 0.5
+    area_zone_mes = ZoneID(configs)
+    area_zone_mes.zones()
+    configs.alpha = 0.8
+    area_zone_mac = ZoneID(configs)
+    area_zone_mac.zones()
+    area_zones = {'micro':area_zone_mic,
+                  'meso':area_zone_mes,
+                  'macro':area_zone_mac}
     cluster = DataTable(configs, area_zones)
     connections = list()
     n_chs = list()
     n_savs = list()
     start_time = time.time()
     for i in range(configs.iter):
-        cluster.update(configs, area_zones)
+        cluster.update(configs)
         print(cluster.time)
-        cluster.update_cluster(cluster.veh_table.ids(), configs, area_zones)
-        cluster.stand_alones_cluster(configs, area_zones)
+        cluster.update_cluster(cluster.veh_table.ids(), configs)
+        cluster.stand_alones_cluster(configs)
         cluster.update_other_connections()
         cluster.form_net_graph()
         connection_evaluation = cluster.connected_components()
@@ -44,7 +54,7 @@ if __name__ == "__main__":
     #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
     # cluster.print_table()
     nx.draw(cluster.ch_net, with_labels=False)
-    print(f'stability_evaluation: {cluster.eval_cluster(configs)}')
+    print(f'stability_evaluation: {cluster.vcsm(configs)}')
     print(f'connection_evaluation: {sum(connections)/len(connections)}->{connections}')
     print('\n')
     print(f'n_vehs: {len(cluster.veh_table.ids())}')

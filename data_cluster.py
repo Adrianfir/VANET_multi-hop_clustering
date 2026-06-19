@@ -34,21 +34,24 @@ class DataTable:
         self.map = None
         self.bus_table = hash.HashTable(config.n_cars * 100)
         self.veh_table = hash.HashTable(config.n_cars * 100)
+        self.micro_zones = zones['micro']
+        self.meso_zones = zones['meso']
+        self.macro_zones = zones['macro']
 
-        self.zone_vehicles = dict(zip(zones.zone_hash.ids(),
-                                      [set() for j in range(len(zones.zone_hash.ids()))]
+        self.zone_vehicles = dict(zip(self.macro_zones.zone_hash.ids(),
+                                      [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
                                       )
                                   )
-        self.zone_buses = dict(zip(zones.zone_hash.ids(),
-                                   [set() for j in range(len(zones.zone_hash.ids()))]
+        self.zone_buses = dict(zip(self.macro_zones.zone_hash.ids(),
+                                   [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
                                    )
                                )
-        self.zone_ch = dict(zip(zones.zone_hash.ids(),
-                                [set() for j in range(len(zones.zone_hash.ids()))]
+        self.zone_ch = dict(zip(self.macro_zones.zone_hash.ids(),
+                                [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
                                 )
                             )
-        self.zone_stand_alone = dict(zip(zones.zone_hash.ids(),
-                                         [set() for j in range(len(zones.zone_hash.ids()))]
+        self.zone_stand_alone = dict(zip(self.macro_zones.zone_hash.ids(),
+                                         [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
                                          )
                                      )
         self.stand_alone = set()
@@ -56,7 +59,7 @@ class DataTable:
         self.left_veh = dict()
         self.left_bus = dict()
         self.time = config.start_time
-        self.understudied_area = zones.understudied_area()
+        self.understudied_area = self.macro_zones.understudied_area()
         self.init_count = 0  # this counter is just for defining the self.net_graph for the very first time
         self.edge_color = ''
         self.sumo_edges, self.sumo_nodes = util.sumo_net_info(config.sumo_edge, config.sumo_node)
@@ -64,12 +67,12 @@ class DataTable:
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
             self.init_count += 1
-            zone_id = zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
+            zone_id = self.macro_zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
                                      float(veh.getAttribute('x'))
                                      )
             # the bus_table will be initiated here for the very first time
             if 'bus' in veh.getAttribute('id'):
-                self.bus_table.set_item(veh.getAttribute('id'), util.initiate_new_bus(veh, zones, zone_id, config,
+                self.bus_table.set_item(veh.getAttribute('id'), util.initiate_new_bus(veh, self.macro_zones, zone_id, config,
                                                                                       self.understudied_area))
                 self.bus_table.values(veh.getAttribute('id'))['arrive_time'] = self.time
                 # Here the buses will be added to zone_buses
@@ -79,7 +82,7 @@ class DataTable:
 
                 # the veh_table will be initiated here for the very first time self.understudied_area
             else:
-                self.veh_table.set_item(veh.getAttribute('id'), util.initiate_new_veh(veh, zones, zone_id, config,
+                self.veh_table.set_item(veh.getAttribute('id'), util.initiate_new_veh(veh, self.macro_zones, zone_id, config,
                                                                                       self.understudied_area))
                 self.veh_table.values(veh.getAttribute('id'))['arrive_time'] = self.time
                 # Here the vehicles will be added to zone_vehicles
@@ -100,7 +103,7 @@ class DataTable:
                                                                    )
                                         )
 
-    def update(self, config, zones):
+    def update(self, config):
         """
         this method updates the bus_table and veh_table values for the current interval.
         Attention: The properties related to clusters and ip addresses are going to be updated here
@@ -112,7 +115,7 @@ class DataTable:
         self.net_graph.remove_edges_from(self.net_graph.edges())
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
-            zone_id = zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
+            zone_id = self.macro_zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
                                      float(veh.getAttribute('x'))
                                      )
 
@@ -120,7 +123,7 @@ class DataTable:
             if 'bus' in veh.getAttribute('id'):
                 bus_ids.add(veh.getAttribute('id'))
                 self.bus_table, self.zone_buses, self.zone_ch = util.update_bus_table(veh, self.bus_table, zone_id,
-                                                                                      self.understudied_area, zones,
+                                                                                      self.understudied_area, self.macro_zones,
                                                                                       config, self.zone_buses,
                                                                                       self.zone_ch, self.time)
                 self.all_chs.add(veh.getAttribute('id'))
@@ -129,7 +132,7 @@ class DataTable:
                 veh_ids.add(veh.getAttribute('id'))
                 self.veh_table, self.zone_vehicles, self.zone_ch, self.stand_alone, \
                     self.zone_stand_alone = util.update_veh_table(veh, self.veh_table, zone_id, self.understudied_area,
-                                                                  zones, config, self.zone_vehicles, self.zone_ch,
+                                                                  self.macro_zones, config, self.zone_vehicles, self.zone_ch,
                                                                   self.stand_alone, self.zone_stand_alone, self.time)
                 if self.veh_table.values(veh.getAttribute('id'))['cluster_head'] is True:
                     self.all_chs.add(veh.getAttribute('id'))
@@ -225,7 +228,7 @@ class DataTable:
             self.veh_table.remove(k)
             self.net_graph.remove_node(k)
 
-    def update_cluster(self, veh_ids, config, zones):
+    def update_cluster(self, veh_ids, config):
 
         """
         This method is designed for finding a cluster for veh_id
@@ -295,7 +298,7 @@ class DataTable:
                      self.stand_alone, self.zone_stand_alone) = util.set_ch_to_veh(veh_id, self.veh_table, self.zone_ch,
                                                                                    self.all_chs, self.stand_alone,
                                                                                    self.zone_stand_alone)
-                    self.update_cluster([veh_id, ], config, zones)
+                    self.update_cluster([veh_id, ], config)
 
                 else:
 
@@ -380,15 +383,15 @@ class DataTable:
                                                                self.zone_buses, self.zone_vehicles)
 
             if len(sub_ch_candidates) == 0:
-                self.single_hop(veh_id, config, zones,
+                self.single_hop(veh_id, config,
                                 bus_candidates, ch_candidates, other_vehs)
             else:
-                self.multi_hop(veh_id, config, zones, bus_candidates, ch_candidates, sub_ch_candidates,
+                self.multi_hop(veh_id, config, bus_candidates, ch_candidates, sub_ch_candidates,
                                other_vehs)
 
             self.check_general_framework(veh_id)
 
-    def single_hop(self, veh_id, config, zones,
+    def single_hop(self, veh_id, config,
                    bus_candidates, ch_candidates, other_vehs):
         prior_bus_candidates = set()
         prior_ch_candidates = set()
@@ -405,7 +408,7 @@ class DataTable:
         if len(prior_bus_candidates) + len(prior_ch_candidates) != 0:
             # to calculate ef for the bus which is the priority_ch
             if len(prior_ch_candidates) == 0:
-                bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
+                bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), self.macro_zones,
                                             prior_bus_candidates, config)
                 (self.bus_table, self.veh_table,
                  self.stand_alone,
@@ -414,7 +417,7 @@ class DataTable:
                                                    ch_candidates, self.stand_alone,
                                                    self.zone_stand_alone, other_vehs)
             elif len(prior_bus_candidates) == 0:
-                veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
+                veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), self.macro_zones,
                                             prior_ch_candidates, config)
                 (self.bus_table, self.veh_table,
                  self.stand_alone,
@@ -425,7 +428,7 @@ class DataTable:
 
         elif (len(bus_candidates) > 0) and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0):
 
-            bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), zones,
+            bus_ch, ef = util.choose_ch(self.bus_table, self.veh_table.values(veh_id), self.macro_zones,
                                         bus_candidates, config)  # determine the best from bus_candidates
 
             (self.bus_table, self.veh_table,
@@ -439,7 +442,7 @@ class DataTable:
               and (len(prior_bus_candidates) + len(prior_ch_candidates) == 0)):
 
             veh_ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id),
-                                        zones, ch_candidates, config)  # determine the best from vehicles
+                                        self.macro_zones, ch_candidates, config)  # determine the best from vehicles
 
             (self.bus_table, self.veh_table,
              self.stand_alone,
@@ -450,7 +453,7 @@ class DataTable:
 
         self.check_general_framework(veh_id)
 
-    def multi_hop(self, veh_id, config, zones, bus_candidates,
+    def multi_hop(self, veh_id, config, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
         if ((self.veh_table.values(veh_id)['priority_ch'] is not None)
                 and (self.veh_table.values(veh_id)['priority_counter'] != 0)):
@@ -459,7 +462,7 @@ class DataTable:
                                                                                       sub_ch_candidates
                                                                                       )
         ch, ef = util.choose_multihop_ch(veh_id, self.veh_table, self.bus_table, bus_candidates,
-                                         ch_candidates, sub_ch_candidates, zones, config)
+                                         ch_candidates, sub_ch_candidates, self.macro_zones, config)
 
         if (('veh' in ch) and (self.veh_table.values(ch)['cluster_head'] is True)) or ('bus' in ch):
             (self.bus_table, self.veh_table,
@@ -481,7 +484,7 @@ class DataTable:
                                                    self.zone_stand_alone, other_vehs)
         self.check_general_framework(veh_id)
 
-    def stand_alones_cluster(self, configs, zones):
+    def stand_alones_cluster(self, configs):
         near_sa = dict()
         n_near_sa = dict()
         pot_ch = dict()
@@ -531,7 +534,7 @@ class DataTable:
                     continue
 
             if len(unique_pot_ch.intersection(near_sa[veh_id]) - mem_control) > 0:
-                ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), zones,
+                ch, ef = util.choose_ch(self.veh_table, self.veh_table.values(veh_id), self.macro_zones,
                                         unique_pot_ch.intersection(near_sa[veh_id]) - mem_control, configs)
                 selected_chs.add(ch)
                 (self.veh_table, self.all_chs, self.stand_alone,
@@ -547,7 +550,7 @@ class DataTable:
 
                 mem_control.add(veh_id)
 
-        self.update_cluster(self.veh_table.ids(), configs, zones)
+        self.update_cluster(self.veh_table.ids(), configs)
 
     def update_other_connections(self):
         # finding buses' other_chs
@@ -607,6 +610,92 @@ class DataTable:
             one_veh += np.divide(summing, total_length * in_area_time)
             total_clusters += one_veh
         return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
+
+    def vcsm(self, configs):
+        """
+        Evaluates VCSM consistent with the paper:
+
+            VCSM = (1/n_vm) * sum_{i in V_m} ( sum_k t_{i,k} / (gamma_i * T_i) )
+
+        where:
+          - V_m: vehicles that were CM at least once (i.e., have at least one record with timer != None)
+          - gamma_i: number of CM-cluster segments joined by vehicle i
+          - T_i: time vehicle i is in the area
+          - t_{i,k}: duration of kth CM-cluster segment (stored as timer)
+
+        Notes:
+          - Vehicles that never become CM (always SA/CH) are excluded from n_vm.
+          - We guard against T_i == 0.
+          - Works for both active vehicles (veh_table) and vehicles that left (left_veh).
+        """
+
+        def _veh_vcsm_one(cluster_record, arrive_time, depart_time):
+            # Time in area
+            T_i = (depart_time - arrive_time)
+            if T_i <= 0:
+                T_i = 1  # avoid division by zero
+
+            # Sum CM durations and count CM segments
+            summing = 0
+            gamma_i = 0
+
+            temp = cluster_record.head
+            while temp:
+                timer = temp.value.get('timer', None) if hasattr(temp, "value") else None
+                if timer is not None:
+                    summing += timer
+                    gamma_i += 1
+                temp = temp.next
+
+            # If never CM, exclude from V_m
+            if gamma_i == 0:
+                return None
+
+            # Per-vehicle stability
+            return summing / (gamma_i * T_i)
+
+        total_vcsm = 0.0
+        n_vm = 0  # vehicles that were CM at least once
+
+        # --- Active vehicles ---
+        for vid in self.veh_table.ids():
+            v = self.veh_table.values(vid)
+
+            # Ensure depart_time exists
+            if v.get('depart_time', None) is None:
+                v['depart_time'] = configs.start_time + configs.iter
+
+            vcsm_i = _veh_vcsm_one(
+                cluster_record=v['cluster_record'],
+                arrive_time=v['arrive_time'],
+                depart_time=v['depart_time']
+            )
+
+            if vcsm_i is None:
+                continue
+
+            total_vcsm += vcsm_i
+            n_vm += 1
+
+        # --- Vehicles that left ---
+        for vid, v in self.left_veh.items():
+            vcsm_i = _veh_vcsm_one(
+                cluster_record=v['cluster_record'],
+                arrive_time=v['arrive_time'],
+                depart_time=v['depart_time']
+            )
+
+            if vcsm_i is None:
+                continue
+
+            total_vcsm += vcsm_i
+            n_vm += 1
+
+        # If nobody was ever CM, define stability as 0 (or 1, but 0 is safer for "no clustering happened")
+        if n_vm == 0:
+            return 0.0
+
+        return total_vcsm / n_vm
 
     def connected_components(self):
         n = 0  # this would return the minimum number of path needed to connect all the clusters
