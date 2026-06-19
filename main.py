@@ -18,14 +18,11 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     configs = Configs().config
 
-    configs.alpha = 0.3
-    area_zone_mic = ZoneID(configs)
+    area_zone_mic = ZoneID(configs, zoning_mode='micro')
     area_zone_mic.zones()
-    configs.alpha = 0.5
-    area_zone_mes = ZoneID(configs)
+    area_zone_mes = ZoneID(configs, zoning_mode='meso')
     area_zone_mes.zones()
-    configs.alpha = 0.8
-    area_zone_mac = ZoneID(configs)
+    area_zone_mac = ZoneID(configs, zoning_mode='macro')
     area_zone_mac.zones()
     area_zones = {'micro':area_zone_mic,
                   'meso':area_zone_mes,

@@ -28,7 +28,10 @@ class Inputs:
                     min_long=-79.540771,
                     max_lat=44.012923,
                     max_long=-79.238069)
-        alpha = 1
+        alpha = float()
+        alpha_micro = 0.2
+        alpha_meso = 0.4
+        alpha_macro=0.8
         veh_trans_range = 100
         bus_trans_range = 800
         start_time = 1600
@@ -57,7 +60,14 @@ class Inputs:
         parser.add_argument('--times', type=xml.dom.minidom.NodeList, default=times,
                             help='includes data for all seconds')
         parser.add_argument('--alpha', type=float, default=alpha,
-                            help='this is the regularization coefficient to change the sie of the zones based on TR')
+                            help='this is the regularization coefficient to change the size of the zones')
+        parser.add_argument('--alpha_micro', type=float, default=alpha_micro,
+                            help='this is the regularization coefficient to create micro zones')
+        parser.add_argument('--alpha_meso', type=float, default=alpha_meso,
+                            help='this is the regularization coefficient to create meso zones')
+        parser.add_argument('--alpha_macro', type=float, default=alpha_macro,
+                            help='this is the regularization coefficient to create macro zones')
+
         parser.add_argument('--veh_trans_range', type=int, default=veh_trans_range,
                             help='this is the transmission range of vehicles considered in this project and it can '
                                  'be up to 2000')

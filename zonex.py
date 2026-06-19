@@ -12,12 +12,19 @@ import hash
 
 class ZoneID:
 
-    def __init__(self, config):
+    def __init__(self, config, zoning_mode):
         """
         # first the x and y based on km is calculated to determine the area (hear greater Toronto Area (GTA) and some
         # cities around it. Then the area will be divided into several zones (almost 1km^2 for each zone)
         :param area: includes the min and max of lat and long of the area (coordinates of the area)
         """
+        if zoning_mode == "micro":
+            config.alpha = config.alpha_micro
+        elif zoning_mode == "meso":
+            config.alpha = config.alpha_meso
+        else:
+            config.alpha = config.alpha_macro
+
         self.area = config.area
         self.un_pad_area = dict()
         self.x_area = hs.haversine((0, self.area["min_long"]), (0, self.area["max_long"]), unit=hs.Unit.KILOMETERS)
