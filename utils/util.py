@@ -26,12 +26,14 @@ import cv2
 import re
 
 
-def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
+def initiate_new_bus(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, config, understudied_area):
     """
     this function is for initialing the new bus coming to the area
     :param veh:veh extracted from .xml file
     :param zones:the hash_table related to zones
-    :param zone_id:zone_id of the vehicle determined based on its location
+    :param micro_zone_id:micro_zone_id of the vehicle determined based on its location
+    :param meso_zone_id:meso_zone_id of the vehicle determined based on its location
+    :param macro_zone_id:macro_zone_id of the vehicle determined based on its location
     :param config:it is the config file
     :param understudied_area:the un_padded area
     :return:a dictionary for initiating the new bus coming to the area
@@ -42,9 +44,13 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
                 speed=float(veh.getAttribute('speed')) + 0.01,
                 pos=float(veh.getAttribute('pos')),
                 lane={'id': veh.getAttribute('lane'), 'timer': 0},
-                zone=zone_id,
-                prev_zone=zone_id,
-                neighbor_zones=zones.neighbor_zones(zone_id),
+                micro_zone= micro_zone_id,
+                prev_micro_zone=micro_zone_id,
+                meso_zone=meso_zone_id,
+                prev_meso_zone=meso_zone_id,
+                macro_zone= macro_zone_id,
+                prev_macro_zone= macro_zone_id,
+                neighbor_zones=zones.neighbor_zones(macro_zone_id),
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
                 depart_time=None,
@@ -64,12 +70,14 @@ def initiate_new_bus(veh, zones, zone_id, config, understudied_area):
                 )
 
 
-def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
+def initiate_new_veh(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, config, understudied_area):
     """
     this function is for initialing the new vehicle coming to the area
     :param veh:veh extracted from .xml file
     :param zones:the hash_table related to zones
-    :param zone_id:zone_id of the vehicle determined based on its location
+    :param micro_zone_id:micro_zone_id of the vehicle determined based on its location
+    :param meso_zone_id:meso_zone_id of the vehicle determined based on its location
+    :param macro_zone_id:macro_zone_id of the vehicle determined based on its location
     :param config:it is the config file
     :param understudied_area:the un_padded area
     :return:a dictionary for initiating the new vehicle coming to the area
@@ -89,9 +97,13 @@ def initiate_new_veh(veh, zones, zone_id, config, understudied_area):
                 degree_n=0,  # this is the neighborhood degree for Befit factor to make comparison
                 pos=float(veh.getAttribute('pos')),
                 lane={'id': lane_id, 'timer': 0},
-                zone=zone_id,
-                prev_zone=zone_id,
-                neighbor_zones=zones.neighbor_zones(zone_id),
+                micro_zone=micro_zone_id,
+                prev_micro_zone=micro_zone_id,
+                meso_zone=meso_zone_id,
+                prev_meso_zone=meso_zone_id,
+                macro_zone= macro_zone_id,
+                prev_macro_zone= macro_zone_id,
+                neighbor_zones=zones.neighbor_zones(macro_zone_id),
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
                 depart_time=None,
@@ -183,7 +195,7 @@ def add_member(ch_id, bus_table,
             update(veh_table.values(ch_id)['gate_chs'].
                    union(veh_table.values(veh_id)['other_chs']))
     stand_alone.remove(veh_id)
-    zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+    zone_stand_alone[veh_table.values(veh_id)['macro_zone']].remove(veh_id)
 
     return (bus_table, veh_table,
             stand_alone, zone_stand_alone)
@@ -254,7 +266,7 @@ def add_sub_member(ch_id, bus_table,
         bus_table.values(ch_id)['sub_cluster_members'].add(veh_id)
 
     stand_alone.remove(veh_id)
-    zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+    zone_stand_alone[veh_table.values(veh_id)['macro_zone']].remove(veh_id)
 
 
     return (bus_table, veh_table,
@@ -295,7 +307,7 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
         veh_table.values(ch_id)['cluster_members'].remove(mem)
     if mem_stays is True:
         stand_alone.add(mem)
-        zone_stand_alone[veh_table.values(mem)['zone']].add(mem)
+        zone_stand_alone[veh_table.values(mem)['macro_zone']].add(mem)
     veh_table.values(mem)['primary_ch'] = None
     veh_table.values(mem)['secondary_ch'] = None
     veh_table.values(mem)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
@@ -330,7 +342,7 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     veh_table.values(sub_mem_id)['priority_counter'] = config.priority_counter
     if sub_mem_stays is True:
         stand_alone.add(sub_mem_id)
-        zone_stand_alone[veh_table.values(sub_mem_id)['zone']].add(sub_mem_id)
+        zone_stand_alone[veh_table.values(sub_mem_id)['macro_zone']].add(sub_mem_id)
     veh_table.values(sub_ch_id)['sub_cluster_members'].remove(sub_mem_id)
     if 'bus' in ch_id:
         bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
@@ -362,19 +374,19 @@ def set_ch(veh_id, veh_table, all_chs, stand_alone,
     """
     veh_table.values(veh_id)['cluster_head'] = True
     veh_table.values(veh_id)['cluster_record'].tail.value['is_ch'] = True
-    veh_table.values(veh_id)['start_ch_zone'] = veh_table.values(veh_id)['zone']
+    veh_table.values(veh_id)['start_ch_zone'] = veh_table.values(veh_id)['macro_zone']
     all_chs.add(veh_id)
-    zone_ch[veh_table.values(veh_id)['zone']].add(veh_id)
+    zone_ch[veh_table.values(veh_id)['macro_zone']].add(veh_id)
     veh_table.values(veh_id)['counter'] = config.counter
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
     veh_table.values(veh_id)['priority_ch'] = None
     if its_sa_clustering is False:
         stand_alone.remove(veh_id)
-        zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+        zone_stand_alone[veh_table.values(veh_id)['macro_zone']].remove(veh_id)
     else:
         try:
             stand_alone.remove(veh_id)
-            zone_stand_alone[veh_table.values(veh_id)['zone']].remove(veh_id)
+            zone_stand_alone[veh_table.values(veh_id)['macro_zone']].remove(veh_id)
         except KeyError:
             pass
 
@@ -399,10 +411,10 @@ def set_ch_to_veh(veh_id, veh_table, zone_ch,
     veh_table.values(veh_id)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
                                                  'ef': None,  'timer': None, 'interrupt': list()})
     veh_table.values(veh_id)['start_ch_zone'] = None
-    zone_ch[veh_table.values(veh_id)['zone']].remove(veh_id)
+    zone_ch[veh_table.values(veh_id)['macro_zone']].remove(veh_id)
     all_chs.remove(veh_id)
     stand_alone.add(veh_id)
-    zone_stand_alone[veh_table.values(veh_id)['zone']].add(veh_id)
+    zone_stand_alone[veh_table.values(veh_id)['macro_zone']].add(veh_id)
     return (veh_table, zone_ch, all_chs,
             stand_alone, zone_stand_alone)
 
@@ -539,10 +551,10 @@ def choose_ch(table, veh_table_i, area_zones, candidates, config):
     """
 
     # Latitude and longitude of the centre of the previous zone that the vehicle was in
-    prev_veh_lat = (area_zones.zone_hash.values(veh_table_i['prev_zone'])['max_lat'] +
-                    area_zones.zone_hash.values(veh_table_i['prev_zone'])['min_lat']) / 2
-    prev_veh_long = (area_zones.zone_hash.values(veh_table_i['prev_zone'])['max_long'] +
-                     area_zones.zone_hash.values(veh_table_i['prev_zone'])['min_long']) / 2
+    prev_veh_lat = (area_zones.zone_hash.values(veh_table_i['prev_macro_zone'])['max_lat'] +
+                    area_zones.zone_hash.values(veh_table_i['prev_macro_zone'])['min_lat']) / 2
+    prev_veh_long = (area_zones.zone_hash.values(veh_table_i['prev_macro_zone'])['max_long'] +
+                     area_zones.zone_hash.values(veh_table_i['prev_macro_zone'])['min_long']) / 2
 
     euclidean_distance = hs.haversine((prev_veh_lat, prev_veh_long),
                                       (veh_table_i['lat'], veh_table_i['long']),
@@ -558,10 +570,10 @@ def choose_ch(table, veh_table_i, area_zones, candidates, config):
 
     for j in candidates:
         # Latitude and longitude of the centre of the previous zone that the candidate was in
-        prev_ch_lat = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_lat'] +
-                       area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_lat']) / 2
-        prev_ch_long = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_long'] +
-                        area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_long']) / 2
+        prev_ch_lat = (area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['max_lat'] +
+                       area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['min_lat']) / 2
+        prev_ch_long = (area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['max_long'] +
+                        area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['min_long']) / 2
 
         euclidean_distance_ch = hs.haversine((prev_ch_lat, prev_ch_long),
                                              (table.values(j)['lat'], table.values(j)['long']),
@@ -598,11 +610,11 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
     beta_ch, beta_bus = det_beta(bus_candidates, ch_candidates, sub_ch_candidates)
 
     # latitude of the centre of previous zone that vehicle were in
-    prev_veh_lat = (area_zones.zone_hash.values(veh_table.values(veh_id)['prev_zone'])['max_lat'] +
-                    area_zones.zone_hash.values(veh_table.values(veh_id)['prev_zone'])['min_lat']) / 2
+    prev_veh_lat = (area_zones.zone_hash.values(veh_table.values(veh_id)['prev_macro_zone'])['max_lat'] +
+                    area_zones.zone_hash.values(veh_table.values(veh_id)['prev_macro_zone'])['min_lat']) / 2
     # longitude of the centre of previous zone that vehicle were in
-    prev_veh_long = (area_zones.zone_hash.values(veh_table.values(veh_id)['prev_zone'])['max_long'] +
-                     area_zones.zone_hash.values(veh_table.values(veh_id)['prev_zone'])['min_long']) / 2
+    prev_veh_long = (area_zones.zone_hash.values(veh_table.values(veh_id)['prev_macro_zone'])['max_long'] +
+                     area_zones.zone_hash.values(veh_table.values(veh_id)['prev_macro_zone'])['min_long']) / 2
 
     euclidian_distance = hs.haversine((prev_veh_lat, prev_veh_long),
                                       (veh_table.values(veh_id)['lat'], veh_table.values(veh_id)['long']),
@@ -620,11 +632,11 @@ def choose_multihop_ch(veh_id, veh_table, bus_table, bus_candidates,
         beta, table = (beta_bus, bus_table) if 'bus' in j else (beta_ch, veh_table)
 
         # latitude of the centre of previous zone that ch were in
-        prev_ch_lat = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_lat'] +
-                       area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_lat']) / 2
+        prev_ch_lat = (area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['max_lat'] +
+                       area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['min_lat']) / 2
         # latitude of the centre of previous zone that ch were in
-        prev_ch_long = (area_zones.zone_hash.values(table.values(j)['prev_zone'])['max_long'] +
-                        area_zones.zone_hash.values(table.values(j)['prev_zone'])['min_long']) / 2
+        prev_ch_long = (area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['max_long'] +
+                        area_zones.zone_hash.values(table.values(j)['prev_macro_zone'])['min_long']) / 2
 
         euclidian_distance = hs.haversine((prev_ch_lat, prev_ch_long),
                                           (table.values(j)['lat'], table.values(j)['long']),
@@ -729,58 +741,71 @@ def det_beta(bus_candidates, ch_candidates,
     return beta_ch, beta_bus
 
 
-def update_bus_table(veh, bus_table, zone_id, understudied_area, zones, config, zone_buses, zone_ch, current_time):
+def update_bus_table(veh, bus_table, micro_zone_id, meso_zone_id, macro_zone_id, understudied_area, zones, config, zone_buses, zone_ch, current_time):
     """
     this function updates the bus_tabel and zone_buses from main.py
     :param current_time: "self.time" in the data_cluster.py
     :param zone_ch: the self.zone_ch dictionary
     :param veh: it's the veh from .xml file
     :param bus_table: its bus_table
-    :param zone_id: the zon_id f the vehicle
+    :param micro_zone_id: the zon_id f the vehicle
+    :param meso_zone_id: the zon_id f the vehicle
+    :param macro_zone_id: the zon_id f the vehicle
     :param understudied_area: the un_padded area
     :param zones: the area_zones.zones() or zones table from the DataTable class in the main.py
     :param config:
     :param zone_buses: zone_buses from the DataTable class in the main.py
     :return: updated bus_table and zone_buses
     """
-    if veh.getAttribute('id') in bus_table.ids():
-        if bus_table.values(veh.getAttribute('id'))['zone'] != zone_id:
-            bus_table.values(veh.getAttribute('id'))['prev_zone'] = \
-                bus_table.values(veh.getAttribute('id'))['zone']  # update prev_zone
-        zone_buses[bus_table.values(veh.getAttribute('id'))['zone']]. \
-            remove(veh.getAttribute('id'))  # This will remove the vehicle from its previous zone_buses
-        zone_ch[bus_table.values(veh.getAttribute('id'))['zone']]. \
-            remove(veh.getAttribute('id'))
-        if bus_table.values(veh.getAttribute('id'))['lane']['id'] == veh.getAttribute('lane'):
-            bus_table.values(veh.getAttribute('id'))['lane']['timer'] += 1
-        else:
-            bus_table.values(veh.getAttribute('id'))['lane']['id'] = veh.getAttribute('lane')
-            bus_table.values(veh.getAttribute('id'))['lane']['timer'] = 0
-        bus_table.values(veh.getAttribute('id'))['long'] = float(veh.getAttribute('x'))
-        bus_table.values(veh.getAttribute('id'))['lat'] = float(veh.getAttribute('y'))
-        bus_table.values(veh.getAttribute('id'))['angle'] = float(veh.getAttribute('angle'))
-        bus_table.values(veh.getAttribute('id'))['speed'] = float(veh.getAttribute('speed')) + 0.01
-        bus_table.values(veh.getAttribute('id'))['pos'] = float(veh.getAttribute('pos'))
-        bus_table.values(veh.getAttribute('id'))['zone'] = zone_id
-        bus_table.values(veh.getAttribute('id'))['in_area'] = presence(understudied_area, veh)
-        bus_table.values(veh.getAttribute('id'))['neighbor_zones'] = zones.neighbor_zones(zone_id)
-        bus_table.values(veh.getAttribute('id'))['gate_chs'] = set()
-        bus_table.values(veh.getAttribute('id'))['gates'] = dict()
-        bus_table.values(veh.getAttribute('id'))['other_chs'] = set()
-        bus_table.values(veh.getAttribute('id'))['other_vehs'] = set()
-        zone_buses[zone_id].add(veh.getAttribute('id'))
-        zone_ch[zone_id].add(veh.getAttribute('id'))
+    veh_id = veh.getAttribute('id')
+    if veh_id in bus_table.ids():
+        veh_bus_table = bus_table.values(veh_id)
+        if veh_bus_table['micro_zone'] != micro_zone_id:
+            veh_bus_table['prev_micro_zone'] = \
+                veh_bus_table['micro_zone']  # update prev_micro_zone
 
+        if veh_bus_table['meso_zone'] != meso_zone_id:
+            veh_bus_table['prev_meso_zone'] = \
+                veh_bus_table['meso_zone']  # update prev_meso_zone
+
+        if veh_bus_table['macro_zone'] != macro_zone_id:
+            veh_bus_table['prev_macro_zone'] = \
+                veh_bus_table['macro_zone']  # update prev_macro_zone
+
+        zone_buses[veh_bus_table['macro_zone']]. \
+            remove(veh_id)  # This will remove the vehicle from its previous zone_buses
+        zone_ch[veh_bus_table['macro_zone']]. \
+            remove(veh_id)
+        if veh_bus_table['lane']['id'] == veh.getAttribute('lane'):
+            veh_bus_table['lane']['timer'] += 1
+        else:
+            veh_bus_table['lane']['id'] = veh.getAttribute('lane')
+            veh_bus_table['lane']['timer'] = 0
+        veh_bus_table['long'] = float(veh.getAttribute('x'))
+        veh_bus_table['lat'] = float(veh.getAttribute('y'))
+        veh_bus_table['angle'] = float(veh.getAttribute('angle'))
+        veh_bus_table['speed'] = float(veh.getAttribute('speed')) + 0.01
+        veh_bus_table['pos'] = float(veh.getAttribute('pos'))
+        veh_bus_table['macro_zone'] = macro_zone_id
+        veh_bus_table['in_area'] = presence(understudied_area, veh)
+        veh_bus_table['neighbor_zones'] = zones.neighbor_zones(macro_zone_id)
+        veh_bus_table['gate_chs'] = set()
+        veh_bus_table['gates'] = dict()
+        veh_bus_table['other_chs'] = set()
+        veh_bus_table['other_vehs'] = set()
+        zone_buses[macro_zone_id].add(veh_id)
+        zone_ch[macro_zone_id].add(veh_id)
     else:
-        bus_table.set_item(veh.getAttribute('id'), initiate_new_bus(veh, zones, zone_id,
+        bus_table.set_item(veh_id, initiate_new_bus(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id,
                                                                     config, understudied_area))
-        bus_table.values(veh.getAttribute('id'))['arrive_time'] = current_time
-        zone_buses[zone_id].add(veh.getAttribute('id'))
-        zone_ch[zone_id].add(veh.getAttribute('id'))
+        bus_table.values(veh_id)['arrive_time'] = current_time
+        zone_buses[macro_zone_id].add(veh_id)
+        zone_ch[macro_zone_id].add(veh_id)
+
     return bus_table, zone_buses, zone_ch
 
 
-def update_veh_table(veh, veh_table, zone_id, understudied_area, zones, config,
+def update_veh_table(veh, veh_table, micro_zone_id, meso_zone_id, macro_zone_id, understudied_area, zones, config,
                      zone_vehicles, zone_ch, stand_alone, zone_stand_alone, current_time):
     """
     this function updates the veh_tabel and zone_vehicles from main.py
@@ -790,24 +815,37 @@ def update_veh_table(veh, veh_table, zone_id, understudied_area, zones, config,
     :param zone_ch: the self.zone_ch dictionary
     :param veh: it's the veh from .xml file
     :param veh_table: its veh_table
-    :param zone_id: the zon_id f the vehicle
+    :param micro_zone_id: the zon_id f the vehicle
+    :param meso_zone_id: the zon_id f the vehicle
+    :param macro_zone_id: the zon_id f the vehicle
     :param understudied_area: the un_padded area
     :param zones: the area_zones.zones() or zones table from the DataTable class in the main.py
     :param config:
     :param zone_vehicles: zone_vehicles from the DataTable class in the main.py
     :return: updated veh_table, zone_vehicles, zone_ch, stand_alone, zone_stand_alone
     """
-    if veh.getAttribute('id') in veh_table.ids():
-        if veh_table.values(veh.getAttribute('id'))['zone'] != zone_id:
-            veh_table.values(veh.getAttribute('id'))['prev_zone'] = \
-                veh_table.values(veh.getAttribute('id'))['zone']  # update prev_zone
-        zone_vehicles[veh_table.values(veh.getAttribute('id'))['zone']]. \
-            remove(veh.getAttribute('id'))  # remove the vehicle from its previous zone_vehicles
-        if veh_table.values(veh.getAttribute('id'))['cluster_head'] is True:
-            zone_ch[veh_table.values(veh.getAttribute('id'))['zone']]. \
-                remove(veh.getAttribute('id'))
-        if veh_table.values(veh.getAttribute('id'))['lane']['id'] == veh.getAttribute('lane'):
-            veh_table.values(veh.getAttribute('id'))['lane']['timer'] += 1
+    veh_id = veh.getAttribute('id')
+    if veh_id in veh_table.ids():
+        veh_veh_table = veh_table.values(veh_id)
+        if veh_veh_table['micro_zone'] !=  macro_zone_id:
+            veh_veh_table['prev_micro_zone'] = \
+                veh_veh_table['micro_zone']  # update prev_micro_zone
+
+        if veh_veh_table['meso_zone'] !=  macro_zone_id:
+            veh_veh_table['prev_meso_zone'] = \
+                veh_veh_table['meso_zone']  # update prev_meso_zone
+
+        if veh_veh_table['macro_zone'] !=  macro_zone_id:
+            veh_veh_table['prev_macro_zone'] = \
+                veh_veh_table['macro_zone']  # update prev_macro_zone
+
+        zone_vehicles[veh_veh_table['macro_zone']]. \
+            remove(veh_id)  # remove the vehicle from its previous zone_vehicles
+        if veh_veh_table['cluster_head'] is True:
+            zone_ch[veh_veh_table['macro_zone']]. \
+                remove(veh_id)
+        if veh_veh_table['lane']['id'] == veh.getAttribute('lane'):
+            veh_veh_table['lane']['timer'] += 1
         else:
             lane_id = veh.getAttribute('lane')
             if ":" not in lane_id:
@@ -815,38 +853,39 @@ def update_veh_table(veh, veh_table, zone_id, understudied_area, zones, config,
                 match = pattern.search(lane_id)
                 if match:
                     lane_id = match.group(1)
-            veh_table.values(veh.getAttribute('id'))['lane']['id'] = lane_id
-            veh_table.values(veh.getAttribute('id'))['lane']['timer'] = 0
-        veh_table.values(veh.getAttribute('id'))['long'] = float(veh.getAttribute('x'))
-        veh_table.values(veh.getAttribute('id'))['lat'] = float(veh.getAttribute('y'))
-        veh_table.values(veh.getAttribute('id'))['angle'] = float(veh.getAttribute('angle'))
-        veh_table.values(veh.getAttribute('id'))['speed'] = float(veh.getAttribute('speed')) + 0.01
-        veh_table.values(veh.getAttribute('id'))['pos'] = float(veh.getAttribute('pos'))
-        veh_table.values(veh.getAttribute('id'))['zone'] = zone_id
-        veh_table.values(veh.getAttribute('id'))['in_area'] = presence(understudied_area, veh)
-        veh_table.values(veh.getAttribute('id'))['neighbor_zones'] = zones.neighbor_zones(zone_id)
-        veh_table.values(veh.getAttribute('id'))['gate_chs'] = set()
-        veh_table.values(veh.getAttribute('id'))['gates'] = dict()
-        veh_table.values(veh.getAttribute('id'))['other_chs'] = set()
-        veh_table.values(veh.getAttribute('id'))['other_vehs'] = set()
-        zone_vehicles[zone_id].add(veh.getAttribute('id'))
-        if veh_table.values(veh.getAttribute('id'))['cluster_head'] is True:
-            zone_ch[zone_id].add(veh.getAttribute('id'))
-        elif (veh_table.values(veh.getAttribute('id'))['cluster_head'] is False) and \
-                (veh_table.values(veh.getAttribute('id'))['primary_ch'] is None):
-            stand_alone.add(veh.getAttribute('id'))
-            if veh.getAttribute('id') in zone_stand_alone[veh_table.values(veh.getAttribute('id'))['prev_zone']]:
-                zone_stand_alone[veh_table.values(veh.getAttribute('id'))['prev_zone']].remove(veh.getAttribute('id'))
+            veh_veh_table['lane']['id'] = lane_id
+            veh_veh_table['lane']['timer'] = 0
+        veh_veh_table['long'] = float(veh.getAttribute('x'))
+        veh_veh_table['lat'] = float(veh.getAttribute('y'))
+        veh_veh_table['angle'] = float(veh.getAttribute('angle'))
+        veh_veh_table['speed'] = float(veh.getAttribute('speed')) + 0.01
+        veh_veh_table['pos'] = float(veh.getAttribute('pos'))
+        veh_veh_table['macro_zone'] =  macro_zone_id
+        veh_veh_table['in_area'] = presence(understudied_area, veh)
+        veh_veh_table['neighbor_zones'] = zones.neighbor_zones(macro_zone_id)
+        veh_veh_table['gate_chs'] = set()
+        veh_veh_table['gates'] = dict()
+        veh_veh_table['other_chs'] = set()
+        veh_veh_table['other_vehs'] = set()
+        zone_vehicles[macro_zone_id].add(veh_id)
+        if veh_veh_table['cluster_head'] is True:
+            zone_ch[macro_zone_id].add(veh_id)
+        elif (veh_veh_table['cluster_head'] is False) and \
+                (veh_veh_table['primary_ch'] is None):
+            stand_alone.add(veh_id)
+            if veh_id in zone_stand_alone[veh_veh_table['prev_macro_zone']]:
+                zone_stand_alone[veh_veh_table['prev_macro_zone']].remove(veh_id)
 
-            zone_stand_alone[zone_id].add(veh.getAttribute('id'))
+            zone_stand_alone[macro_zone_id].add(veh_id)
 
     else:
-        veh_table.set_item(veh.getAttribute('id'), initiate_new_veh(veh, zones, zone_id,
+        veh_table.set_item(veh_id, initiate_new_veh(veh, zones,  micro_zone_id, meso_zone_id, macro_zone_id,
                                                                     config, understudied_area))
-        veh_table.values(veh.getAttribute('id'))['arrive_time'] = current_time
-        zone_vehicles[zone_id].add(veh.getAttribute('id'))
-        stand_alone.add(veh.getAttribute('id'))
-        zone_stand_alone[veh_table.values(veh.getAttribute('id'))['zone']].add(veh.getAttribute('id'))
+        veh_table.values(veh_id)['arrive_time'] = current_time
+        zone_vehicles[macro_zone_id].add(veh_id)
+        stand_alone.add(veh_id)
+        zone_stand_alone[veh_table.values(veh_id)['macro_zone']].add(veh_id)
+
     return veh_table, zone_vehicles, zone_ch, stand_alone, zone_stand_alone
 
 

@@ -18,15 +18,15 @@ import matplotlib.pyplot as plt
 if __name__ == "__main__":
     configs = Configs().config
 
-    area_zone_mic = ZoneID(configs, zoning_mode='micro')
-    area_zone_mic.zones()
-    area_zone_mes = ZoneID(configs, zoning_mode='meso')
-    area_zone_mes.zones()
-    area_zone_mac = ZoneID(configs, zoning_mode='macro')
-    area_zone_mac.zones()
-    area_zones = {'micro':area_zone_mic,
-                  'meso':area_zone_mes,
-                  'macro':area_zone_mac}
+    area_zone_micro = ZoneID(configs, zoning_mode='mic')
+    area_zone_micro.zones()
+    area_zone_meso = ZoneID(configs, zoning_mode='mes')
+    area_zone_meso.zones()
+    area_zone_macro = ZoneID(configs, zoning_mode='mac')
+    area_zone_macro.zones()
+    area_zones = {'micro':area_zone_micro,
+                  'meso':area_zone_meso,
+                  'macro':area_zone_macro}
     cluster = DataTable(configs, area_zones)
     connections = list()
     n_chs = list()

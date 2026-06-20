@@ -67,38 +67,47 @@ class DataTable:
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
             self.init_count += 1
-            zone_id = self.macro_zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
+            micro_zone_id = self.micro_zones.det_zone(float(veh.getAttribute('y')),
+                                                      # determine the micro_zone_id of the car (bus | veh)
+                                                      float(veh.getAttribute('x'))
+                                                      )
+            meso_zone_id = self.meso_zones.det_zone(float(veh.getAttribute('y')),
+                                                      # determine the meso_zone_id of the car (bus | veh)
+                                                      float(veh.getAttribute('x'))
+                                                      )
+            macro_zone_id = self.macro_zones.det_zone(float(veh.getAttribute('y')),  # determine the macro_zone_id of the car (bus | veh)
                                      float(veh.getAttribute('x'))
                                      )
             # the bus_table will be initiated here for the very first time
-            if 'bus' in veh.getAttribute('id'):
-                self.bus_table.set_item(veh.getAttribute('id'), util.initiate_new_bus(veh, self.macro_zones, zone_id, config,
+            veh_id = veh.getAttribute('id')
+            if 'bus' in veh_id:
+                self.bus_table.set_item(veh_id, util.initiate_new_bus(veh, self.macro_zones, micro_zone_id, meso_zone_id, macro_zone_id, config,
                                                                                       self.understudied_area))
-                self.bus_table.values(veh.getAttribute('id'))['arrive_time'] = self.time
+                self.bus_table.values(veh_id)['arrive_time'] = self.time
                 # Here the buses will be added to zone_buses
-                self.zone_buses[zone_id].add(veh.getAttribute('id'))
-                self.zone_ch[zone_id].add(veh.getAttribute('id'))
-                self.all_chs.add(veh.getAttribute('id'))
+                self.zone_buses[macro_zone_id].add(veh_id)
+                self.zone_ch[macro_zone_id].add(veh_id)
+                self.all_chs.add(veh_id)
 
                 # the veh_table will be initiated here for the very first time self.understudied_area
             else:
-                self.veh_table.set_item(veh.getAttribute('id'), util.initiate_new_veh(veh, self.macro_zones, zone_id, config,
+                self.veh_table.set_item(veh_id, util.initiate_new_veh(veh, self.macro_zones, micro_zone_id, meso_zone_id, macro_zone_id, config,
                                                                                       self.understudied_area))
-                self.veh_table.values(veh.getAttribute('id'))['arrive_time'] = self.time
+                self.veh_table.values(veh_id)['arrive_time'] = self.time
                 # Here the vehicles will be added to zone_vehicles
-                self.zone_vehicles[zone_id].add(veh.getAttribute('id'))
-                self.stand_alone.add(veh.getAttribute('id'))
-                self.zone_stand_alone[self.veh_table.values(veh.getAttribute('id'))['zone']].add(veh.getAttribute('id'))
+                self.zone_vehicles[macro_zone_id].add(veh_id)
+                self.stand_alone.add(veh_id)
+                self.zone_stand_alone[self.veh_table.values(veh_id)['macro_zone']].add(veh_id)
 
             # create the self.net_graph or add the new vertex
             if self.init_count == 1:
                 self.net_graph = nx.Graph()
-                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
+                self.net_graph.add_node(veh_id, pos=(float(veh.getAttribute('y')),
                                                                 float(veh.getAttribute('x'))
                                                                      )
                                         )
             else:
-                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
+                self.net_graph.add_node(veh_id, pos=(float(veh.getAttribute('y')),
                                                                    float(veh.getAttribute('x'))
                                                                    )
                                         )
@@ -115,36 +124,45 @@ class DataTable:
         self.net_graph.remove_edges_from(self.net_graph.edges())
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
-            zone_id = self.macro_zones.det_zone(float(veh.getAttribute('y')),  # determine the zone_id of the car (bus | veh)
+            micro_zone_id = self.micro_zones.det_zone(float(veh.getAttribute('y')),  # determine the micro_zone_id of the car (bus | veh)
                                      float(veh.getAttribute('x'))
                                      )
+            meso_zone_id = self.meso_zones.det_zone(float(veh.getAttribute('y')),
+                                                      # determine the meso_zone_id of the car (bus | veh)
+                                                      float(veh.getAttribute('x'))
+                                                      )
+            macro_zone_id = self.macro_zones.det_zone(float(veh.getAttribute('y')),
+                                                      # determine the macro_zone_id of the car (bus | veh)
+                                                      float(veh.getAttribute('x'))
+                                                      )
 
             # update the bus_table for the time step
-            if 'bus' in veh.getAttribute('id'):
-                bus_ids.add(veh.getAttribute('id'))
-                self.bus_table, self.zone_buses, self.zone_ch = util.update_bus_table(veh, self.bus_table, zone_id,
+            veh_id = veh.getAttribute('id')
+            if 'bus' in veh_id:
+                bus_ids.add(veh_id)
+                self.bus_table, self.zone_buses, self.zone_ch = util.update_bus_table(veh, self.bus_table, micro_zone_id, meso_zone_id, macro_zone_id,
                                                                                       self.understudied_area, self.macro_zones,
                                                                                       config, self.zone_buses,
                                                                                       self.zone_ch, self.time)
-                self.all_chs.add(veh.getAttribute('id'))
+                self.all_chs.add(veh_id)
 
             else:
-                veh_ids.add(veh.getAttribute('id'))
+                veh_ids.add(veh_id)
                 self.veh_table, self.zone_vehicles, self.zone_ch, self.stand_alone, \
-                    self.zone_stand_alone = util.update_veh_table(veh, self.veh_table, zone_id, self.understudied_area,
+                    self.zone_stand_alone = util.update_veh_table(veh, self.veh_table, micro_zone_id, meso_zone_id, macro_zone_id, self.understudied_area,
                                                                   self.macro_zones, config, self.zone_vehicles, self.zone_ch,
                                                                   self.stand_alone, self.zone_stand_alone, self.time)
-                if self.veh_table.values(veh.getAttribute('id'))['cluster_head'] is True:
-                    self.all_chs.add(veh.getAttribute('id'))
+                if self.veh_table.values(veh_id)['cluster_head'] is True:
+                    self.all_chs.add(veh_id)
             # add the vertex to the graph
             try:
-                self.net_graph.nodes[veh.getAttribute('id')]['pos'] = (float(veh.getAttribute('y')),
+                self.net_graph.nodes[veh_id]['pos'] = (float(veh.getAttribute('y')),
                                                                           float(veh.getAttribute('x'))
                                                                           )
 
             except KeyError:
 
-                self.net_graph.add_node(veh.getAttribute('id'), pos=(float(veh.getAttribute('y')),
+                self.net_graph.add_node(veh_id, pos=(float(veh.getAttribute('y')),
                                                                    float(veh.getAttribute('x'))
                                                                      )
                                         )
@@ -167,8 +185,8 @@ class DataTable:
                     self.veh_table.values(m)['priority_ch'] = None
                     self.veh_table.values(m)['priority_counter'] = config.priority_counter
 
-            self.zone_buses[self.bus_table.values(k)['zone']].remove(k)
-            self.zone_ch[self.bus_table.values(k)['zone']].remove(k)
+            self.zone_buses[self.bus_table.values(k)['macro_zone']].remove(k)
+            self.zone_ch[self.bus_table.values(k)['macro_zone']].remove(k)
             self.all_chs.remove(k)
             self.bus_table.values(k)['depart_time'] = self.time - 1
             self.left_bus[k] = self.bus_table.values(k)
@@ -194,7 +212,7 @@ class DataTable:
                                                                                        self.zone_stand_alone,
                                                                                        ch_stays=False)
 
-                self.zone_ch[self.veh_table.values(k)['zone']].remove(k)
+                self.zone_ch[self.veh_table.values(k)['macro_zone']].remove(k)
                 self.all_chs.remove(k)
 
             elif self.veh_table.values(k)['primary_ch'] is not None:
@@ -219,9 +237,9 @@ class DataTable:
 
             elif k in self.stand_alone:
                 self.stand_alone.remove(k)
-                self.zone_stand_alone[self.veh_table.values(k)['zone']].remove(k)
+                self.zone_stand_alone[self.veh_table.values(k)['macro_zone']].remove(k)
 
-            self.zone_vehicles[self.veh_table.values(k)['zone']].remove(k)
+            self.zone_vehicles[self.veh_table.values(k)['macro_zone']].remove(k)
             self.veh_table.values(k)['depart_time'] = self.time - 1
             self.left_veh[k] = self.veh_table.values(k)
 
@@ -263,7 +281,7 @@ class DataTable:
                         self.veh_table.values(veh_id)['priority_counter'] = config.priority_counter
                         self.veh_table.values(veh_id)['priority_ch'] = None
                     self.stand_alone.add(veh_id)
-                    self.zone_stand_alone[self.veh_table.values(veh_id)['zone']].add(veh_id)
+                    self.zone_stand_alone[self.veh_table.values(veh_id)['macro_zone']].add(veh_id)
                     continue
                 else:
                     (self.veh_table, self.all_chs, self.stand_alone,
@@ -291,8 +309,8 @@ class DataTable:
                 # if the veh_id is a ch and does not have any member, after changing its zone, it won't remain as a ch
                 # unless get selected by another vehicles or can't find a cluster head after the counter
                 if (len(self.veh_table.values(veh_id)['cluster_members']) == 0) and \
-                        ((self.veh_table.values(veh_id)['start_ch_zone'] != self.veh_table.values(veh_id)['zone']) and
-                         (self.veh_table.values(veh_id)['prev_zone'] != self.veh_table.values(veh_id)['zone'])):
+                        ((self.veh_table.values(veh_id)['start_ch_zone'] != self.veh_table.values(veh_id)['macro_zone']) and
+                         (self.veh_table.values(veh_id)['prev_macro_zone'] != self.veh_table.values(veh_id)['macro_zone'])):
 
                     (self.veh_table, self.zone_ch, self.all_chs,
                      self.stand_alone, self.zone_stand_alone) = util.set_ch_to_veh(veh_id, self.veh_table, self.zone_ch,
@@ -302,7 +320,7 @@ class DataTable:
 
                 else:
 
-                    self.zone_ch[self.veh_table.values(veh_id)['zone']].add(veh_id)
+                    self.zone_ch[self.veh_table.values(veh_id)['macro_zone']].add(veh_id)
                     self.all_chs.add(veh_id)
 
                 continue
