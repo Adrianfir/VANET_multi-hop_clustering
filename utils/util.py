@@ -827,11 +827,11 @@ def update_veh_table(veh, veh_table, micro_zone_id, meso_zone_id, macro_zone_id,
     veh_id = veh.getAttribute('id')
     if veh_id in veh_table.ids():
         veh_veh_table = veh_table.values(veh_id)
-        if veh_veh_table['micro_zone'] !=  macro_zone_id:
+        if veh_veh_table['micro_zone'] !=  micro_zone_id:
             veh_veh_table['prev_micro_zone'] = \
                 veh_veh_table['micro_zone']  # update prev_micro_zone
 
-        if veh_veh_table['meso_zone'] !=  macro_zone_id:
+        if veh_veh_table['meso_zone'] !=  meso_zone_id:
             veh_veh_table['prev_meso_zone'] = \
                 veh_veh_table['meso_zone']  # update prev_meso_zone
 
