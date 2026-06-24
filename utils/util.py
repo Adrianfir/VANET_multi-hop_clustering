@@ -58,6 +58,12 @@ def initiate_new_bus(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 message_dest={},
                 message_source={},
                 cluster_head=True,
+                root_ch=veh.getAttribute('id'),
+                parent_node=None,
+                hop_count=0,
+                children_nodes=None,
+                current_root_cost=0.0,
+                current_parent_cost=0.0,
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),
                 sub_cluster_members=set(),
@@ -103,6 +109,7 @@ def initiate_new_veh(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 prev_meso_zone=meso_zone_id,
                 macro_zone= macro_zone_id,
                 prev_macro_zone= macro_zone_id,
+                unresolved_start_macro_zone=macro_zone_id,
                 neighbor_zones=zones.neighbor_zones(macro_zone_id),
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
@@ -115,6 +122,11 @@ def initiate_new_veh(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 secondary_ch=None,
                 priority_ch=None,
                 priority_counter=config.priority_counter,
+                root_ch=None,
+                parent_node=None,
+                hop_count=None,
+                current_root_cost=None,
+                current_parent_cost=None,
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),  # This will be a Graph if the vehicle is a ch
                 sub_cluster_members=set(),  # cluster members connected to claster through this vehicle would be in this set
@@ -156,6 +168,9 @@ def add_member(ch_id, bus_table,
     :return:
     """
     veh_table.values(veh_id)['primary_ch'] = ch_id
+    veh_table.values(veh_id)['root_ch'] = ch_id
+    veh_table.values(veh_id)['parent_node'] = ch_id
+    veh_table.values(veh_id)['hop_count'] = 1
 
     if ch_id == veh_table.values(veh_id)['priority_ch']:
         veh_table.values(veh_id)['cluster_record'].pop()
@@ -227,6 +242,9 @@ def add_sub_member(ch_id, bus_table,
     """
 
     veh_table.values(veh_id)['primary_ch'] = ch_id
+    veh_table.values(veh_id)['root_ch'] = ch_id
+    veh_table.values(veh_id)['parent_node'] = sub_ch_id
+    veh_table.values(veh_id)['hop_count'] = veh_table.values(sub_ch_id).get('hop_count', 1) + 1
 
     if ch_id == veh_table.values(veh_id)['priority_ch']:
         veh_table.values(veh_id)['cluster_record'].pop()
@@ -310,6 +328,11 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
         zone_stand_alone[veh_table.values(mem)['macro_zone']].add(mem)
     veh_table.values(mem)['primary_ch'] = None
     veh_table.values(mem)['secondary_ch'] = None
+    veh_table.values(mem)['root_ch'] = None
+    veh_table.values(mem)['parent_node'] = None
+    veh_table.values(mem)['hop_count'] = None
+    veh_table.values(mem)['current_root_cost'] = None
+    veh_table.values(mem)['current_parent_cost'] = None
     veh_table.values(mem)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
                                                           'ef': None, 'timer': None, 'interrupt': list()})
 
@@ -350,6 +373,12 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
         veh_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
     veh_table.values(sub_mem_id)['primary_ch'] = None
     veh_table.values(sub_mem_id)['secondary_ch'] = None
+    veh_table.values(sub_mem_id)['secondary_ch'] = None
+    veh_table.values(sub_mem_id)['root_ch'] = None
+    veh_table.values(sub_mem_id)['parent_node'] = None
+    veh_table.values(sub_mem_id)['hop_count'] = None
+    veh_table.values(sub_mem_id)['current_root_cost'] = None
+    veh_table.values(sub_mem_id)['current_parent_cost'] = None
     veh_table.values(sub_mem_id)['cluster_record'].append(None,
                                                           {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
                                                            'ef': None,  'timer': None, 'interrupt': list()})
@@ -374,6 +403,9 @@ def set_ch(veh_id, veh_table, all_chs, stand_alone,
     """
     veh_table.values(veh_id)['cluster_head'] = True
     veh_table.values(veh_id)['cluster_record'].tail.value['is_ch'] = True
+    veh_table.values(veh_id)['root_ch'] = veh_id
+    veh_table.values(veh_id)['parent_node'] = None
+    veh_table.values(veh_id)['hop_count'] = 0
     veh_table.values(veh_id)['start_ch_zone'] = veh_table.values(veh_id)['macro_zone']
     all_chs.add(veh_id)
     zone_ch[veh_table.values(veh_id)['macro_zone']].add(veh_id)
@@ -408,6 +440,11 @@ def set_ch_to_veh(veh_id, veh_table, zone_ch,
     """
     veh_table.values(veh_id)['cluster_members'] = set()
     veh_table.values(veh_id)['cluster_head'] = False
+    veh_table.values(veh_id)['root_ch'] = None
+    veh_table.values(veh_id)['parent_node'] = None
+    veh_table.values(veh_id)['hop_count'] = None
+    veh_table.values(veh_id)['current_root_cost'] = None
+    veh_table.values(veh_id)['current_parent_cost'] = None
     veh_table.values(veh_id)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
                                                  'ef': None,  'timer': None, 'interrupt': list()})
     veh_table.values(veh_id)['start_ch_zone'] = None
@@ -415,6 +452,7 @@ def set_ch_to_veh(veh_id, veh_table, zone_ch,
     all_chs.remove(veh_id)
     stand_alone.add(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['macro_zone']].add(veh_id)
+    veh_table.values(veh_id)['unresolved_start_macro_zone'] = veh_table.values(veh_id)['macro_zone']
     return (veh_table, zone_ch, all_chs,
             stand_alone, zone_stand_alone)
 
@@ -786,6 +824,8 @@ def update_bus_table(veh, bus_table, micro_zone_id, meso_zone_id, macro_zone_id,
         veh_bus_table['angle'] = float(veh.getAttribute('angle'))
         veh_bus_table['speed'] = float(veh.getAttribute('speed')) + 0.01
         veh_bus_table['pos'] = float(veh.getAttribute('pos'))
+        veh_bus_table['micro_zone'] = micro_zone_id
+        veh_bus_table['meso_zone'] = meso_zone_id
         veh_bus_table['macro_zone'] = macro_zone_id
         veh_bus_table['in_area'] = presence(understudied_area, veh)
         veh_bus_table['neighbor_zones'] = zones.neighbor_zones(macro_zone_id)
@@ -860,7 +900,9 @@ def update_veh_table(veh, veh_table, micro_zone_id, meso_zone_id, macro_zone_id,
         veh_veh_table['angle'] = float(veh.getAttribute('angle'))
         veh_veh_table['speed'] = float(veh.getAttribute('speed')) + 0.01
         veh_veh_table['pos'] = float(veh.getAttribute('pos'))
-        veh_veh_table['macro_zone'] =  macro_zone_id
+        veh_veh_table['micro_zone'] = micro_zone_id
+        veh_veh_table['meso_zone'] = meso_zone_id
+        veh_veh_table['macro_zone'] = macro_zone_id
         veh_veh_table['in_area'] = presence(understudied_area, veh)
         veh_veh_table['neighbor_zones'] = zones.neighbor_zones(macro_zone_id)
         veh_veh_table['gate_chs'] = set()

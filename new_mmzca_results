@@ -1,0 +1,241 @@
+Data:small
+TR:100m
+avg_chs: 31.583333333333332
+avg_stand_alones: 3.316666666666667
+stability_evaluation: 0.3787590098470568
+
+        alpha_micro = 0.2
+        alpha_meso = 0.4
+        alpha_macro= 0.8
+        veh_trans_range = 100
+        bus_trans_range = 800
+        start_time = 1600
+        iter = 60
+        counter = 3
+        priority_counter = 3
+        map_zoom = 15.3
+        center_loc = [43.869846, -79.443523]
+        fps = 5
+        weights_s = np.array([1.0, 0.0, 0.0])       # direction's angle, speed, distance for single-hop
+        weights_m = np.array([0.6, 0.2, 0.2])       # direction's angle, speed, distance for multi-hop
+
+
+        # ---------- New Values I need for new_mmzca ----------
+
+        h_max = 2
+        root_hysteresis_delta = 0.05
+        parent_hysteresis_delta = 0.05
+
+        micro_zone_max = 1
+        meso_zone_max = 1
+        macro_zone_max = 1
+
+        w_root_meso_dir = 0.30
+        w_root_macro_dir = 0.30
+        w_root_macro_dist = 0.1
+        w_root_hop = 0.10
+        w_root_load = 0.05
+        w_root_prev = 0.10
+        w_root_dru = 0.05
+
+        w_parent_micro_dir = 0.6
+        w_parent_speed = 0.10
+        w_root_speed = 0.0      # I think the root level speed would makes things worse
+        w_parent_dist = 0.10
+        w_parent_hop = 0.10
+        w_parent_load = 0.10
+
+        w_pch_degree = 0.35
+        w_pch_micro_dir = 0.30
+        w_pch_dist = 0.15
+        w_pch_micro_zone = 0.10
+        w_pch_meso_zone = 0.10
+
+        w_rn_sa_gain = 0.40
+        w_rn_root_gain = 0.25
+        w_rn_coherence = 0.20
+        w_rn_hop_penalty = 0.10
+        w_rn_load_penalty = 0.05
+
+        max_rn_members = 20
+        max_ch_members = 35
+
+        lambda_rn = 0.85
+
+---------------------------------------------------------------------------------
+Data:small
+TR:200m
+avg_chs: 17.75
+avg_stand_alones: 3.75
+stability_evaluation: 0.545164330048798
+
+        alpha_micro = 0.3
+        alpha_meso = 0.6
+        alpha_macro= 0.9
+        veh_trans_range = 100
+        bus_trans_range = 800
+        start_time = 1600
+        iter = 60
+        counter = 3
+        priority_counter = 3
+        map_zoom = 15.3
+        center_loc = [43.869846, -79.443523]
+        fps = 5
+        weights_s = np.array([1.0, 0.0, 0.0])       # direction's angle, speed, distance for single-hop
+        weights_m = np.array([0.6, 0.2, 0.2])       # direction's angle, speed, distance for multi-hop
+
+
+        # ---------- New Values I need for new_mmzca ----------
+
+        h_max = 2
+        root_hysteresis_delta = 0.05
+        parent_hysteresis_delta = 0.05
+
+        micro_zone_max = 1
+        meso_zone_max = 1
+        macro_zone_max = 1
+
+        w_root_meso_dir = 0.30
+        w_root_macro_dir = 0.30
+        w_root_macro_dist = 0.1
+        w_root_hop = 0.10
+        w_root_load = 0.05
+        w_root_prev = 0.10
+        w_root_dru = 0.05
+
+        w_parent_micro_dir = 0.6
+        w_parent_speed = 0.10
+        w_root_speed = 0.0      # I think the root level speed would makes things worse
+        w_parent_dist = 0.10
+        w_parent_hop = 0.10
+        w_parent_load = 0.10
+
+        w_pch_degree = 0.35
+        w_pch_micro_dir = 0.30
+        w_pch_dist = 0.15
+        w_pch_micro_zone = 0.10
+        w_pch_meso_zone = 0.10
+
+        w_rn_sa_gain = 0.40
+        w_rn_root_gain = 0.25
+        w_rn_coherence = 0.20
+        w_rn_hop_penalty = 0.10
+        w_rn_load_penalty = 0.05
+
+        max_rn_members = 20
+        max_ch_members = 35
+
+        lambda_rn = 0.85
+
+---------------------------------------------------------------------------------
+Data:small
+TR:300m
+avg_chs: 11.566666666666666
+avg_stand_alones: 2.316666666666667
+stability_evaluation: 0.6268305325417902
+
+        alpha_micro = 0.5
+        alpha_meso = 0.75
+        alpha_macro= 1
+        veh_trans_range = 300
+        bus_trans_range = 800
+        start_time = 1600
+        iter = 60
+        counter = 3
+        priority_counter = 3
+        map_zoom = 15.3
+        center_loc = [43.869846, -79.443523]
+        fps = 5
+        weights_s = np.array([1.0, 0.0, 0.0])       # direction's angle, speed, distance for single-hop
+        weights_m = np.array([0.6, 0.2, 0.2])       # direction's angle, speed, distance for multi-hop
+
+
+        # ---------- New Values I need for new_mmzca ----------
+
+        h_max = 3
+        root_hysteresis_delta = 0.05
+        parent_hysteresis_delta = 0.05
+
+        micro_zone_max = 1
+        meso_zone_max = 1
+        macro_zone_max = 1
+
+        w_root_meso_dir = 0.30
+        w_root_macro_dir = 0.30
+        w_root_macro_dist = 0.1
+        w_root_hop = 0.10
+        w_root_load = 0.05
+        w_root_prev = 0.10
+        w_root_dru = 0.05
+
+        w_parent_micro_dir = 0.6
+        w_parent_speed = 0.10
+        w_root_speed = 0.0      # I think the root level speed would makes things worse
+        w_parent_dist = 0.10
+        w_parent_hop = 0.10
+        w_parent_load = 0.10
+
+        w_pch_degree = 0.35
+        w_pch_micro_dir = 0.30
+        w_pch_dist = 0.15
+        w_pch_micro_zone = 0.10
+        w_pch_meso_zone = 0.10
+
+        w_rn_sa_gain = 0.40
+        w_rn_root_gain = 0.25
+        w_rn_coherence = 0.20
+        w_rn_hop_penalty = 0.10
+        w_rn_load_penalty = 0.05
+
+        max_rn_members = 20
+        max_ch_members = 35
+
+        lambda_rn = 1
+
+---------------------------------------------------------------------------------
+
+Data:small
+TR:400m
+avg_chs: 7.416666666666667
+avg_stand_alones: 2.0166666666666666
+stability_evaluation: 0.6595287847808239
+
+        h_max = 2
+        root_hysteresis_delta = 0.05
+        parent_hysteresis_delta = 0.05
+
+        micro_zone_max = 1
+        meso_zone_max = 1
+        macro_zone_max = 1
+
+        w_root_meso_dir = 0.3
+        w_root_macro_dir = 0.6
+        w_root_macro_dist = 1
+        w_root_hop = 0.10
+        w_root_load = 0.05
+        w_root_prev = 0.10
+        w_root_dru = 0.05
+
+        w_parent_micro_dir = 0.7
+        w_parent_speed = 0.10
+        w_root_speed = 0.0      # I think the root level speed makes things worse
+        w_parent_dist = 0.10
+        w_parent_hop = 0.10
+        w_parent_load = 0.00
+
+        w_pch_degree = 0.35
+        w_pch_micro_dir = 0.30
+        w_pch_dist = 0.15
+        w_pch_micro_zone = 0.10
+        w_pch_meso_zone = 0.10
+
+        w_rn_sa_gain = 0.40
+        w_rn_root_gain = 0.25
+        w_rn_coherence = 0.20
+        w_rn_hop_penalty = 0.10
+        w_rn_load_penalty = 0.05
+
+        max_rn_members = 20
+        max_ch_members = 35
+
+        lambda_rn = 1
