@@ -440,6 +440,8 @@ def set_ch_to_veh(veh_id, veh_table, zone_ch,
     """
     veh_table.values(veh_id)['cluster_members'] = set()
     veh_table.values(veh_id)['cluster_head'] = False
+    veh_table.values(veh_id)['primary_ch'] = None
+    veh_table.values(veh_id)['secondary_ch'] = None
     veh_table.values(veh_id)['root_ch'] = None
     veh_table.values(veh_id)['parent_node'] = None
     veh_table.values(veh_id)['hop_count'] = None

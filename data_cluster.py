@@ -282,451 +282,428 @@ class DataTable:
         for veh_id in self.veh_table.ids():
             uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
 
-    def update_cluster(self, veh_ids, config):
-        """
-        New MMZCA update logic:
-          - maintain clustered nodes if feasible
-          - recover previous root during priority window
-          - unresolved SAs try root-first, parent-second joining
-          - do not self-elect CH here immediately; leave that to stand_alones_cluster
-        """
-        # ---- pass 1: clear per-tick local info and sync fields
-        for veh_id in self.veh_table.ids():
-            self.veh_table.values(veh_id)['other_chs'] = set()
-            self.veh_table.values(veh_id)['gates'] = dict()
-            self.veh_table.values(veh_id)['gate_chs'] = set()
-            self.veh_table.values(veh_id)['other_vehs'] = set()
-            uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
 
-        # ---- pass 2: maintain CHs and currently attached vehicles
-        for veh_id in list(self.veh_table.ids()):
-            st = self.veh_table.values(veh_id)
+    def _pmc_clear_local_fields(self, veh_id):
+        st = self.veh_table.values(veh_id)
+        st['other_chs'] = set()
+        st['gates'] = dict()
+        st['gate_chs'] = set()
+        st['other_vehs'] = set()
 
-            # ---- CH maintenance
-            if st['cluster_head'] is True:
-                temp_cluster_members = st['cluster_members'].copy()
-                for m in temp_cluster_members:
-                    dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
-                    if dist > min(st['trans_range'], self.veh_table.values(m)['trans_range']):
-                        if m in st['cluster_members']:
-                            self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                                util.remove_member(
-                                    m, veh_id, self.veh_table, self.bus_table, config,
-                                    self.stand_alone, self.zone_stand_alone
-                                )
+    def _pmc_node_state(self, node_id):
+        if 'bus' in node_id:
+            return self.bus_table.values(node_id)
+        return self.veh_table.values(node_id)
 
-                # CH with no members becomes SA after macro-zone change
-                if (len(st['cluster_members']) == 0 and
-                        (st['start_ch_zone'] != st['macro_zone']) and
-                        (st['prev_macro_zone'] != st['macro_zone'])):
-                    self.veh_table, self.zone_ch, self.all_chs, self.stand_alone, self.zone_stand_alone = \
-                        util.set_ch_to_veh(
-                            veh_id, self.veh_table, self.zone_ch,
-                            self.all_chs, self.stand_alone, self.zone_stand_alone
-                        )
-                    # uhelp.reset_cluster_fields(veh_id, self.veh_table, self.bus_table)
-                    # uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
-                # else:
-                #     self.zone_ch[self.veh_table.values(veh_id)['macro_zone']].add(veh_id)
-                    # self.all_chs.add(veh_id)
-                continue
+    def _pmc_params(self, config):
+        alpha = getattr(config, 'pmc_alpha', 1.0/3.0)
+        beta = getattr(config, 'pmc_beta', 1.0/3.0)
+        gamma = getattr(config, 'pmc_gamma', 1.0/3.0)
+        max_member = getattr(config, 'max_member', getattr(config, 'max_rn_members', 10))
+        h_max = getattr(config, 'h_max', 2)
+        return alpha, beta, gamma, max_member, h_max
 
-            # ---- attached vehicle maintenance
-            if st['primary_ch'] is not None:
-                parent_id = uhelp.get_parent(veh_id, self.veh_table, self.bus_table)
-                root_id = uhelp.get_root(veh_id, self.veh_table, self.bus_table)
-
-                # if parent_id is None or root_id is None:
-                #     self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                #         uhelp.detach_from_current_cluster(
-                #             veh_id, self.veh_table, self.bus_table, config,
-                #             self.stand_alone, self.zone_stand_alone
-                #         )
-                #     continue
-
-                still_feasible = uhelp.feasible_parent_for_root(
-                    veh_id, parent_id, root_id,
-                    self.veh_table, self.bus_table,
-                    self.micro_zones, self.meso_zones, self.macro_zones,
-                    config
-                )
-
-                if still_feasible:
-                    # refresh timer as before
-                    rec = self.veh_table.values(veh_id)['cluster_record'].tail.value
-                    if rec['start_time'] is not None and rec['start_time'] + rec['timer'] - 1 != self.time:
-                        rec['timer'] += 1
+    def _pmc_following_degree(self, node_id):
+        st = self._pmc_node_state(node_id)
+        followers = len(st.get('cluster_members', set())) + len(st.get('sub_cluster_members', set()))
+        same_lane = 0
+        if 'veh' in node_id and node_id in self.veh_table.ids():
+            lane = st['lane']['id']
+            neigh = self.macro_zones.neighbor_zones(st['macro_zone'])
+            for j in self.veh_table.ids():
+                if j == node_id:
                     continue
-                else:
-                    if parent_id == root_id:
-                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                            util.remove_member(
-                                veh_id, root_id, self.veh_table, self.bus_table, config,
-                                self.stand_alone, self.zone_stand_alone
-                            )
-                    else:
-                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                            util.remove_sub_member(
-                                veh_id, parent_id, root_id, self.veh_table, self.bus_table, config,
-                                self.stand_alone, self.zone_stand_alone
-                            )
-
-                    # self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                    #     uhelp.detach_from_current_cluster(
-                    #         veh_id, self.veh_table, self.bus_table, config,
-                    #         self.stand_alone, self.zone_stand_alone
-                    #     )
-                    # after detaching, it becomes SA with previous-root priority preserved by legacy fields
+                sj = self.veh_table.values(j)
+                if sj['macro_zone'] not in neigh:
                     continue
+                if sj['lane']['id'] != lane:
+                    continue
+                try:
+                    d = util.det_dist(node_id, self.veh_table, j, self.veh_table)
+                except Exception:
+                    continue
+                if d <= min(st['trans_range'], sj['trans_range']):
+                    same_lane += 1
+        return same_lane + followers
 
-        # ---- pass 3: unresolved stand-alone joining logic
-        temp_stand_alone = list(self.stand_alone.copy())
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
+    def _pmc_relative_mobility(self, id1, id2):
+        s1 = self._pmc_node_state(id1)
+        s2 = self._pmc_node_state(id2)
+        speed_term = abs(s1['speed'] - s2['speed']) / max(abs(s1['speed']), abs(s2['speed']), 1e-6)
+        angle_diff = abs(s1['angle'] - s2['angle'])
+        while angle_diff > 180:
+            angle_diff -= 360
+        angle_term = abs(angle_diff) / 180.0
+        return 0.7 * speed_term + 0.3 * angle_term
+
+    def _pmc_avg_relative_mobility(self, veh_id):
+        if veh_id not in self.veh_table.ids():
+            return float('inf')
+        st = self.veh_table.values(veh_id)
+        neigh = []
+        for j in self.veh_table.ids():
+            if j == veh_id:
                 continue
+            sj = self.veh_table.values(j)
+            if sj['macro_zone'] not in st['neighbor_zones']:
+                continue
+            try:
+                d = util.det_dist(veh_id, self.veh_table, j, self.veh_table)
+            except Exception:
+                continue
+            if d <= min(st['trans_range'], sj['trans_range']):
+                neigh.append(j)
+        if not neigh:
+            return float('inf')
+        vals = [self._pmc_relative_mobility(veh_id, j) for j in neigh]
+        return float(np.mean(vals))
 
-            st = self.veh_table.values(veh_id)
+    def _pmc_etx(self, id1, id2):
+        s1 = self._pmc_node_state(id1)
+        s2 = self._pmc_node_state(id2)
+        table2 = self.bus_table if 'bus' in id2 else self.veh_table
+        d = util.det_dist(id1, self.veh_table if 'veh' in id1 else self.bus_table, id2, table2)
+        q = max(0.0, 1.0 - d / max(min(s1['trans_range'], s2['trans_range']), 1.0))
+        q = max(q*q, 1e-6)
+        return 1.0 / q
 
-            # if st['cluster_head'] is True or st['primary_ch'] is not None:
-            #     continue
-            # if st['in_area'] is not True:
-            #     continue
+    def _pmc_llt(self, id1, id2):
+        s1 = self._pmc_node_state(id1)
+        s2 = self._pmc_node_state(id2)
+        dx = (s2['long'] - s1['long']) * 85000.0
+        dy = (s2['lat'] - s1['lat']) * 111000.0
+        a1 = np.deg2rad(s1['angle'])
+        a2 = np.deg2rad(s2['angle'])
+        v1x, v1y = s1['speed'] * np.cos(a1), s1['speed'] * np.sin(a1)
+        v2x, v2y = s2['speed'] * np.cos(a2), s2['speed'] * np.sin(a2)
+        dvx, dvy = v1x - v2x, v1y - v2y
+        denom = dvx*dvx + dvy*dvy
+        if denom <= 1e-6:
+            return 1e6
+        r = min(s1['trans_range'], s2['trans_range'])
+        cross = dx*dvy - dy*dvx
+        inside = r*r*denom - cross*cross
+        if inside < 0:
+            inside = 0.0
+        llt = (np.sqrt(inside) - (dx*dvx + dy*dvy)) / denom
+        return max(float(llt), 1e-6)
 
-            st['other_chs'] = set()
-            st['gates'] = dict()
-            st['gate_chs'] = set()
-            st['other_vehs'] = set()
+    def _pmc_priority(self, veh_id, cand_id, config):
+        alpha, beta, gamma, _, _ = self._pmc_params(config)
+        nf = max(self._pmc_following_degree(cand_id), 1)
+        etx = self._pmc_etx(veh_id, cand_id)
+        llt = self._pmc_llt(veh_id, cand_id)
+        return alpha * (1.0 / nf) + beta * etx + gamma * (1.0 / llt)
 
-            bus_candidates, ch_candidates, sub_ch_candidates, other_vehs = util.det_near_ch(
-                veh_id, self.veh_table, self.bus_table,
-                self.zone_buses, self.zone_vehicles
+    def _pmc_bech(self, x, y):
+        fx = self._pmc_following_degree(x)
+        fy = self._pmc_following_degree(y)
+        rx = self._pmc_avg_relative_mobility(x)
+        ry = self._pmc_avg_relative_mobility(y)
+        return (fx > fy) or ((fx == fy) and (rx < ry))
+
+    def _pmc_can_accept_parent(self, parent_id, config):
+        _, _, _, max_member, h_max = self._pmc_params(config)
+        if 'bus' in parent_id:
+            return True
+        st = self.veh_table.values(parent_id)
+        if st['cluster_head']:
+            return len(st.get('cluster_members', set())) < max_member
+        if st['primary_ch'] is not None:
+            return (st.get('hop_count', 1) < h_max and len(st.get('sub_cluster_members', set())) < max_member)
+        return False
+
+    def _pmc_root_of(self, node_id):
+        if 'bus' in node_id:
+            return node_id
+        st = self.veh_table.values(node_id)
+        if st['cluster_head']:
+            return node_id
+        return st.get('primary_ch')
+
+    def _pmc_attach(self, veh_id, parent_id, config, bus_candidates, ch_candidates, other_vehs):
+        root_id = self._pmc_root_of(parent_id)
+        if root_id is None:
+            root_id = parent_id
+        if parent_id == root_id:
+            self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = util.add_member(
+                root_id, self.bus_table, veh_id, self.veh_table, config, 0.0, self.time,
+                bus_candidates, ch_candidates, self.stand_alone, self.zone_stand_alone, other_vehs
             )
+        else:
+            self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = util.add_sub_member(
+                root_id, self.bus_table, veh_id, parent_id, self.veh_table, config, 0.0, self.time,
+                bus_candidates, ch_candidates, self.stand_alone, self.zone_stand_alone, other_vehs
+            )
+        uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
 
-            if len(sub_ch_candidates) == 0:
-                self.single_hop(veh_id, config, bus_candidates, ch_candidates, other_vehs)
-            else:
-                self.multi_hop(veh_id, config, bus_candidates, ch_candidates, sub_ch_candidates, other_vehs)
+    def _pmc_detach(self, veh_id, config):
+        st = self.veh_table.values(veh_id)
+        root_id = st.get('primary_ch')
+        parent_id = st.get('secondary_ch')
+        if root_id is None:
+            return
+        if parent_id is None:
+            self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = util.remove_member(
+                veh_id, root_id, self.veh_table, self.bus_table, config,
+                self.stand_alone, self.zone_stand_alone
+            )
+        else:
+            self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = util.remove_sub_member(
+                veh_id, parent_id, root_id, self.veh_table, self.bus_table, config,
+                self.stand_alone, self.zone_stand_alone
+            )
+        uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
 
-    def multi_hop(self, veh_id, config, bus_candidates,
-                  ch_candidates, sub_ch_candidates, other_vehs):
+    def _pmc_best_existing_parent(self, veh_id, config):
+        bus_candidates, ch_candidates, sub_ch_candidates, other_vehs = util.det_near_ch(
+            veh_id, self.veh_table, self.bus_table, self.zone_buses, self.zone_vehicles
+        )
+        best_parent = None
+        best_pri = float('inf')
+        # prefer CH/bus when available
+        for cand in list(bus_candidates) + list(ch_candidates):
+            if self._pmc_can_accept_parent(cand, config):
+                pri = 0.0 if 'bus' in cand else self._pmc_priority(veh_id, cand, config)
+                if pri < best_pri:
+                    best_pri = pri
+                    best_parent = cand
+        if best_parent is None:
+            for cand in sub_ch_candidates:
+                if self._pmc_can_accept_parent(cand, config):
+                    pri = self._pmc_priority(veh_id, cand, config)
+                    if pri < best_pri:
+                        best_pri = pri
+                        best_parent = cand
+        return best_parent, bus_candidates, ch_candidates, sub_ch_candidates, other_vehs
+
+    def _pmc_try_merge_ch(self, veh_id, config):
         if veh_id not in self.veh_table.ids():
             return
-
-        rn_candidates = set()
-
-        for cand in sub_ch_candidates:
-            if cand in self.veh_table.ids():
-                if (self.veh_table.values(cand)['cluster_head'] is False and
-                        self.veh_table.values(cand)['primary_ch'] is not None):
-                    rn_candidates.add(cand)
-
-        bus_candidates, ch_candidates, rn_candidates = uhelp.priority_visible_candidates(
-            veh_id, bus_candidates, ch_candidates, rn_candidates, self.veh_table
-        )
-
-        best_cand, best_cost = uhelp.choose_best_visible_candidate(
-            veh_id,
-            bus_candidates, ch_candidates, rn_candidates,
-            self.veh_table, self.bus_table,
-            self.micro_zones, self.meso_zones, self.macro_zones,
-            config
-        )
-
-        if best_cand is None:
-            st = self.veh_table.values(veh_id)
-
-            if st['counter'] > 0:
-                st['counter'] -= 1
-
-            # priority window countdown
-            if st['priority_ch'] is not None:
-                st['priority_counter'] -= 1
-                if st['priority_counter'] <= 0:
-                    st['priority_ch'] = None
-                    st['priority_counter'] = config.priority_counter
-            else:
-                st['priority_counter'] = config.priority_counter
-
-            self.stand_alone.add(veh_id)
-            self.zone_stand_alone[st['macro_zone']].add(veh_id)
-            return
-
         st = self.veh_table.values(veh_id)
-
-        # switching only inside same cluster
-        if st['primary_ch'] is not None:
-            if not uhelp.intra_cluster_switch_allowed(veh_id, best_cand, self.veh_table, self.bus_table):
-                return
-
-        if uhelp.candidate_type(best_cand, self.veh_table, self.bus_table) == 'root':
-            root_id = best_cand
-            parent_id = best_cand
-        else:
-            root_id = uhelp.get_root(best_cand, self.veh_table, self.bus_table)
-            parent_id = best_cand
-
-        self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = \
-            uhelp.attach_to_parent(
-                root_id, parent_id, veh_id,
-                self.veh_table, self.bus_table, config, self.time,
-                bus_candidates, ch_candidates,
-                self.stand_alone, self.zone_stand_alone, other_vehs,
-                root_cost_value=best_cost if parent_id == root_id else None,
-                parent_cost_value=best_cost
-            )
-
+        if not st['cluster_head']:
+            return
+        _, _, _, max_member, h_max = self._pmc_params(config)
+        _, near_chs = set(), set()
+        bus_candidates, ch_candidates, _, _ = util.det_near_ch(veh_id, self.veh_table, self.bus_table, self.zone_buses, self.zone_vehicles)
+        best_target = None
+        for ch in ch_candidates:
+            if ch == veh_id:
+                continue
+            if not self._pmc_bech(ch, veh_id):
+                continue
+            # rough same direction condition
+            if abs(self.veh_table.values(ch)['angle'] - st['angle']) > 45 and abs(self.veh_table.values(ch)['angle'] - st['angle']) < 315:
+                continue
+            best_target = ch
+            break
+        if best_target is None:
+            return
+        if len(self.veh_table.values(best_target).get('cluster_members', set())) >= max_member:
+            return
+        # demote current CH and attach directly to better CH
+        self.veh_table, self.zone_ch, self.all_chs, self.stand_alone, self.zone_stand_alone = util.set_ch_to_veh(
+            veh_id, self.veh_table, self.zone_ch, self.all_chs, self.stand_alone, self.zone_stand_alone
+        )
+        # after set_ch_to_veh, attach as direct member
+        self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = util.add_member(
+            best_target, self.bus_table, veh_id, self.veh_table, config, 0.0, self.time,
+            set(), {best_target}, self.stand_alone, self.zone_stand_alone, set()
+        )
         uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
+
+
+    def update_cluster(self, veh_ids, config):
+        """
+        PMC-style clustering update:
+          - maintain existing CHs and members
+          - try CH merging among neighboring CHs
+          - unresolved vehicles first try to join existing CHs, then CMs within MAX_HOP
+          - unresolved SAs are left for passive cluster formation in stand_alones_cluster
+        """
+        # pass 1: clear local tick fields
+        for veh_id in list(self.veh_table.ids()):
+            self._pmc_clear_local_fields(veh_id)
+            uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
+
+        # pass 2: maintain CHs
+        for veh_id in list(self.veh_table.ids()):
+            st = self.veh_table.values(veh_id)
+            if st['cluster_head'] is not True:
+                continue
+
+            temp_cluster_members = st['cluster_members'].copy()
+            for m in temp_cluster_members:
+                if m not in self.veh_table.ids():
+                    continue
+                dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
+                if dist > min(st['trans_range'], self.veh_table.values(m)['trans_range']):
+                    if m in st['cluster_members']:
+                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = util.remove_member(
+                            m, veh_id, self.veh_table, self.bus_table, config,
+                            self.stand_alone, self.zone_stand_alone
+                        )
+
+            if (len(st['cluster_members']) == 0 and len(st.get('sub_cluster_members', set())) == 0 and
+                    (st['start_ch_zone'] != st['macro_zone']) and
+                    (st['prev_macro_zone'] != st['macro_zone'])):
+                self.veh_table, self.zone_ch, self.all_chs, self.stand_alone, self.zone_stand_alone = util.set_ch_to_veh(
+                    veh_id, self.veh_table, self.zone_ch, self.all_chs, self.stand_alone, self.zone_stand_alone
+                )
+            else:
+                self._pmc_try_merge_ch(veh_id, config)
+
+        # pass 3: maintain already attached members
+        for veh_id in list(self.veh_table.ids()):
+            st = self.veh_table.values(veh_id)
+            if st['cluster_head'] is True or st['primary_ch'] is None:
+                continue
+            parent_id = st['secondary_ch'] if st['secondary_ch'] is not None else st['primary_ch']
+            root_id = st['primary_ch']
+            if parent_id is None or root_id is None:
+                self._pmc_detach(veh_id, config)
+                continue
+            try:
+                parent_table = self.bus_table if 'bus' in parent_id else self.veh_table
+                dist = util.det_dist(veh_id, self.veh_table, parent_id, parent_table)
+                still_feasible = dist <= min(st['trans_range'], parent_table.values(parent_id)['trans_range'])
+                if st.get('hop_count', 1) > getattr(config, 'h_max', 2):
+                    still_feasible = False
+            except Exception:
+                still_feasible = False
+            if still_feasible:
+                rec = st['cluster_record'].tail.value
+                if rec['start_time'] is not None and rec['start_time'] + rec['timer'] - 1 != self.time:
+                    rec['timer'] += 1
+            else:
+                self._pmc_detach(veh_id, config)
+
+        # pass 4: unresolved vehicles try joining existing clusters
+        for veh_id in list(self.stand_alone.copy()):
+            if veh_id not in self.veh_table.ids():
+                continue
+            st = self.veh_table.values(veh_id)
+            if st['cluster_head'] or st['primary_ch'] is not None or st['in_area'] is not True:
+                continue
+
+            parent, bus_candidates, ch_candidates, sub_ch_candidates, other_vehs = self._pmc_best_existing_parent(veh_id, config)
+            if parent is not None:
+                self._pmc_attach(veh_id, parent, config, bus_candidates, ch_candidates, other_vehs)
+            else:
+                # remain SA for passive election stage
+                self.stand_alone.add(veh_id)
+                self.zone_stand_alone[st['macro_zone']].add(veh_id)
+
+
 
     def single_hop(self, veh_id, config,
                    bus_candidates, ch_candidates, other_vehs):
-        if veh_id not in self.veh_table.ids():
-            return
+        """PMC branch keeps joining logic inside update_cluster; retained for compatibility."""
+        return
 
-        rn_candidates = set()
-
-        # use priority window
-        bus_candidates, ch_candidates, rn_candidates = uhelp.priority_visible_candidates(
-            veh_id, bus_candidates, ch_candidates, rn_candidates, self.veh_table
-        )
-
-        best_cand, best_cost = uhelp.choose_best_visible_candidate(
-            veh_id,
-            bus_candidates, ch_candidates, rn_candidates,
-            self.veh_table, self.bus_table,
-            self.micro_zones, self.meso_zones, self.macro_zones,
-            config
-        )
-
-        if best_cand is None:
-            st = self.veh_table.values(veh_id)
-
-            if st['counter'] > 0:
-                st['counter'] -= 1
-
-            # priority window countdown
-            if st['priority_ch'] is not None:
-                st['priority_counter'] -= 1
-                if st['priority_counter'] <= 0:
-                    # st['priority_ch'] = None
-                    # st['priority_counter'] = config.priority_counter
-                    self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch = \
-                        util.set_ch(
-                            veh_id, self.veh_table, self.all_chs,
-                            self.stand_alone, self.zone_stand_alone,
-                            self.zone_ch, config, its_sa_clustering=False
-                        )
-            # else:
-            #     st['priority_counter'] = config.priority_counter
-
-            # self.stand_alone.add(veh_id)
-            # self.zone_stand_alone[st['macro_zone']].add(veh_id)
-            return
-
-        st = self.veh_table.values(veh_id)
-
-        # switching only inside same cluster
-        if st['primary_ch'] is not None:
-            if not uhelp.intra_cluster_switch_allowed(veh_id, best_cand, self.veh_table, self.bus_table):
-                return
-
-        if uhelp.candidate_type(best_cand, self.veh_table, self.bus_table) == 'root':
-            root_id = best_cand
-            parent_id = best_cand
-        else:
-            root_id = uhelp.get_root(best_cand, self.veh_table, self.bus_table)
-            parent_id = best_cand
-
-        self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = \
-            uhelp.attach_to_parent(
-                root_id, parent_id, veh_id,
-                self.veh_table, self.bus_table, config, self.time,
-                bus_candidates, ch_candidates,
-                self.stand_alone, self.zone_stand_alone, other_vehs,
-                root_cost_value=best_cost if parent_id == root_id else None,
-                parent_cost_value=best_cost
-            )
-
-        uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
+    def multi_hop(self, veh_id, config, bus_candidates,
+                  ch_candidates, sub_ch_candidates, other_vehs):
+        """PMC branch keeps joining logic inside update_cluster; retained for compatibility."""
+        return
 
     def stand_alones_cluster(self, configs):
         """
-        New SA handling:
-          1. build nearby unresolved SA sets
-          2. choose better PCH/anchor instead of pure neighbor count
-          3. remaining SAs try anchor-assisted joining
-          4. only unresolved and expired-counter SAs become CH
+        PMC-style passive cluster formation among unresolved SAs.
+        Vehicles follow the best higher-priority one-hop SA; roots become CHs passively.
+        Remaining unresolved nodes decrement counter and may become isolated CHs.
         """
-        near_sa = {}
-        pch_choice = {}
-        processed = set()
+        _, _, _, max_member, h_max = self._pmc_params(configs)
+        sa_ids = [vid for vid in list(self.stand_alone) if vid in self.veh_table.ids() and self.veh_table.values(vid)['primary_ch'] is None and self.veh_table.values(vid)['cluster_head'] is False]
+        parent_map = {}
 
-        temp_stand_alone = sorted(list(self.stand_alone), reverse=True)
+        # each SA follows the best more-stable one-hop SA by priority
+        for veh_id in sa_ids:
+            st = self.veh_table.values(veh_id)
+            neigh = util.det_near_sa(veh_id, self.veh_table, self.stand_alone, self.zone_stand_alone)
+            candidates = []
+            for j in neigh:
+                if j not in sa_ids:
+                    continue
+                if self._pmc_bech(j, veh_id):
+                    candidates.append(j)
+            if candidates:
+                best = min(candidates, key=lambda j: self._pmc_priority(veh_id, j, configs))
+                parent_map[veh_id] = best
+            else:
+                parent_map[veh_id] = None
 
-        # Step 1: nearby unresolved SAs
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
-                continue
-            near_sa[veh_id] = util.det_near_sa(
-                veh_id, self.veh_table,
-                self.stand_alone, self.zone_stand_alone
-            )
-
-        # Step 2: better PCH / anchor consensus
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
-                continue
-            if len(near_sa.get(veh_id, set())) == 0:
-                continue
-
-            best_anchor, best_score = uhelp.best_pch_for_sa(
-                veh_id, near_sa,
-                self.veh_table,
-                self.micro_zones, self.meso_zones,
-                configs
-            )
-            if best_anchor is not None:
-                pch_choice[veh_id] = best_anchor
-
-        # Step 3: unresolved SAs use anchor-assisted joining
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
-                continue
-            if veh_id in processed:
-                continue
-            if self.veh_table.values(veh_id)['cluster_head'] is True:
-                continue
-            if self.veh_table.values(veh_id)['primary_ch'] is not None:
-                continue
-
-            bus_candidates, ch_candidates, rn_candidates, other_vehs = util.det_near_ch(
-                veh_id, self.veh_table, self.bus_table,
-                self.zone_buses, self.zone_vehicles
-            )
-
-            # add chosen anchor as an RN candidate if it is attached
-            anchor = pch_choice.get(veh_id)
-            if anchor is not None and anchor in self.veh_table.ids():
-                if (self.veh_table.values(anchor)['cluster_head'] is False and
-                        self.veh_table.values(anchor)['primary_ch'] is not None):
-                    rn_candidates.add(anchor)
-
-            root_to_parents = uhelp.feasible_roots_and_parents(
-                veh_id,
-                bus_candidates, ch_candidates, rn_candidates,
-                self.veh_table, self.bus_table,
-                self.micro_zones, self.meso_zones, self.macro_zones,
-                configs
-            )
-
-            if len(root_to_parents) > 0:
-                best_root, best_root_cost = uhelp.choose_best_root(
-                    veh_id, root_to_parents,
-                    self.veh_table, self.bus_table,
-                    self.meso_zones, self.macro_zones,
-                    configs
-                )
-
-                if best_root is not None:
-                    best_parent, best_parent_cost = uhelp.choose_best_parent_for_root(
-                        veh_id, best_root, root_to_parents[best_root],
-                        self.veh_table, self.bus_table,
-                        self.micro_zones,
-                        configs
-                    )
-
-                    if best_parent is not None:
-                        self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = \
-                            uhelp.attach_to_parent(
-                                best_root, best_parent, veh_id,
-                                self.veh_table, self.bus_table, configs, self.time,
-                                bus_candidates, ch_candidates,
-                                self.stand_alone, self.zone_stand_alone, other_vehs,
-                                root_cost_value=best_root_cost,
-                                parent_cost_value=best_parent_cost
-                            )
-                        uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
-                        processed.add(veh_id)
+        # detect passive roots
+        roots = set()
+        for veh_id in sa_ids:
+            seen = []
+            cur = veh_id
+            while cur is not None and cur not in seen:
+                seen.append(cur)
+                cur = parent_map.get(cur)
+            if cur is None:
+                roots.add(seen[-1])
+            else:
+                cyc = seen[seen.index(cur):]
+                best = cyc[0]
+                for x in cyc[1:]:
+                    if self._pmc_bech(x, best):
+                        best = x
+                roots.add(best)
+                for x in cyc:
+                    if x != best and parent_map.get(x) == best:
                         continue
 
-            # Step 4: only unresolved and expired-counter SAs become CH
-            if (self.veh_table.values(veh_id)['primary_ch'] is None and
-                    self.veh_table.values(veh_id)['cluster_head'] is False and
-                    self.veh_table.values(veh_id)['counter'] <= 0):
-                self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch = \
-                    util.set_ch(
-                        veh_id, self.veh_table, self.all_chs,
-                        self.stand_alone, self.zone_stand_alone,
-                        self.zone_ch, configs, its_sa_clustering=True
-                    )
+        # set roots as CHs if they have neighbors/followers, else let counter decide later
+        for r in list(roots):
+            if r not in self.veh_table.ids():
+                continue
+            if self.veh_table.values(r)['cluster_head'] is False:
+                self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch = util.set_ch(
+                    r, self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch, configs, its_sa_clustering=True
+                )
+                uhelp.sync_node_cluster_fields(r, self.veh_table, self.bus_table)
 
-                self.veh_table.values(veh_id)['root_ch'] = veh_id
-                self.veh_table.values(veh_id)['parent_node'] = None
-                self.veh_table.values(veh_id)['hop_count'] = 0
-                self.veh_table.values(veh_id)['current_root_cost'] = 0.0
-                self.veh_table.values(veh_id)['current_parent_cost'] = 0.0
+        # attach non-roots along parent chains up to h_max
+        progress = True
+        while progress:
+            progress = False
+            for veh_id in sa_ids:
+                if veh_id not in self.veh_table.ids():
+                    continue
+                st = self.veh_table.values(veh_id)
+                if st['cluster_head'] or st['primary_ch'] is not None:
+                    continue
+                parent = parent_map.get(veh_id)
+                if parent is None or parent not in self.veh_table.ids():
+                    continue
+                pst = self.veh_table.values(parent)
+                if pst['cluster_head'] is True:
+                    if self._pmc_can_accept_parent(parent, configs):
+                        self._pmc_attach(veh_id, parent, configs, set(), {parent}, set())
+                        progress = True
+                elif pst['primary_ch'] is not None and pst.get('hop_count', 1) < h_max and self._pmc_can_accept_parent(parent, configs):
+                    self._pmc_attach(veh_id, parent, configs, set(), set(), set())
+                    progress = True
 
-        # Final consistency pass
+        # unresolved nodes decrement counter and may become isolated CHs
+        for veh_id in list(self.stand_alone.copy()):
+            if veh_id not in self.veh_table.ids():
+                continue
+            st = self.veh_table.values(veh_id)
+            if st['primary_ch'] is not None or st['cluster_head'] is True:
+                continue
+            if st['counter'] > 0:
+                st['counter'] -= 1
+            if st['counter'] <= 0:
+                self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch = util.set_ch(
+                    veh_id, self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch, configs, its_sa_clustering=True
+                )
+                uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
+                self.veh_table.values(veh_id)['counter'] = configs.counter
+
+        # final consistency
         for veh_id in self.veh_table.ids():
             uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
-
-    def update_other_connections(self):
-        # finding buses' other_chs
-        # Here the other_vehs must be updated again. Otherwise, the graph would face with some conflicts
-        self.veh_table, self.bus_table = util.other_connections_update(self.veh_table, self.bus_table,
-                                                                       self.zone_ch, self.zone_buses,
-                                                                       self.zone_vehicles)
-
-    def form_net_graph(self):
-        for veh_id in self.veh_table.ids():
-            if self.veh_table.values(veh_id)['cluster_head'] is False:
-                self.net_graph = util_graph.veh_add_edges(veh_id, self.veh_table, self.net_graph)
-            else:
-                self.net_graph = util_graph.ch_add_edges(veh_id, self.veh_table, self.net_graph)
-
-        for bus_id in self.bus_table.ids():
-            self.net_graph = util_graph.bus_add_edges(bus_id, self.bus_table, self.net_graph)
-
-
-    def eval_cluster(self, configs):
-        total_clusters = 0
-        n_sav_ch = 0  # number of vehicles that are allways ch or stand-alone (never experiences being a cm)
-        for i in self.veh_table.ids():
-            if self.veh_table.values(i)['depart_time'] is None:
-                self.veh_table.values(i)['depart_time'] = configs.start_time + configs.iter
-            in_area_time = self.veh_table.values(i)["depart_time"] - self.veh_table.values(i)["arrive_time"] + 1
-            total_length = self.veh_table.values(i)['cluster_record'].length
-            if (total_length == 1) and (self.veh_table.values(i)['cluster_record'].head.value['timer'] is None):
-                n_sav_ch += 1
-                continue
-            if in_area_time == 0:
-                in_area_time += 1
-
-            one_veh = 0
-            temp = self.veh_table.values(i)['cluster_record'].head
-            summing = 0
-            while temp:
-                if temp.value['timer'] is not None:
-                    summing += temp.value['timer']  # temp.length acs as penalty
-                temp = temp.next
-            one_veh += np.divide(summing, total_length*in_area_time)
-            total_clusters += one_veh
-
-        for i in self.left_veh.keys():
-            total_length = self.left_veh[i]['cluster_record'].length
-            if (total_length == 1) and (self.left_veh[i]['cluster_record'].head.key is None):
-                n_sav_ch += 1
-                continue
-            one_veh = 0
-            temp = self.left_veh[i]['cluster_record'].head
-            summing = 0
-            in_area_time = self.left_veh[i]['depart_time'] - self.left_veh[i]['arrive_time']
-            while temp:
-                if temp.value['timer'] is not None:
-                    summing += np.divide(temp.value['timer'], (total_length*in_area_time))  # temp.length acs as penalty
-                temp = temp.next
-            one_veh += np.divide(summing, total_length * in_area_time)
-            total_clusters += one_veh
-        return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
 
     def vcsm(self, configs):
         """
@@ -748,7 +725,7 @@ class DataTable:
 
         def _veh_vcsm_one(cluster_record, arrive_time, depart_time):
             # Total time in area
-            T_i = depart_time - arrive_time
+            T_i = depart_time - arrive_time + 1
             if T_i <= 0:
                 T_i = 1
 
