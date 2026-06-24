@@ -65,6 +65,11 @@ class DataTable:
         self.edge_color = ''
         self.sumo_edges, self.sumo_nodes = util.sumo_net_info(config.sumo_edge, config.sumo_node)
         self.ch_net = None
+
+        self.tvct_history = []  # stores TVCT(t) at each tick
+        self.avg_tvct_history = []  # stores running average up to each tick
+        self.tvct_cumulative = 0.0
+
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
             self.init_count += 1
@@ -806,6 +811,90 @@ class DataTable:
             return 0.0
 
         return total_vcsm / n_vm
+
+    def _tvct_state(self, veh_id):
+        """
+        Return compact clustering state for TVCT counting.
+        Leaving area / absent vehicle is handled outside and should not be counted.
+        """
+        if veh_id not in self.veh_table.ids():
+            return None
+
+        st = self.veh_table.values(veh_id)
+
+        if st['cluster_head'] is True:
+            return ('CH', veh_id)
+
+        if st['primary_ch'] is not None:
+            return ('MEM', st['primary_ch'])
+
+        return ('SA', None)
+
+    def _snapshot_tvct_states(self):
+        """
+        Snapshot only active in-area vehicles before clustering actions of the tick.
+        """
+        snap = {}
+        for veh_id in self.veh_table.ids():
+            st = self.veh_table.values(veh_id)
+            if st.get('in_area', False) is True:
+                snap[veh_id] = self._tvct_state(veh_id)
+        return snap
+
+    def update_tvct(self, pre_states):
+        """
+        Compute TVCT(t) by comparing states before and after clustering for active vehicles.
+
+        Rules:
+          - SA -> CH: count 1
+          - CH -> SA: count 1
+          - SA -> MEM: count 1
+          - MEM -> SA: count 1
+          - CH -> MEM: count 1
+          - MEM -> CH: count 1
+          - MEM(root_a) -> MEM(root_b), root_a != root_b: count 1
+          - MEM(root_a) -> CH(root_a or self): count 1
+          - CH -> MEM(root_b): count 1
+          - No change or only parent/RN change within same root: count 0
+          - Vehicle leaving area / disappearing: count 0
+          - New arriving vehicle in same tick: count 0 unless you explicitly want otherwise
+        """
+        tvct_t = 0
+
+        post_ids = set(self.veh_table.ids())
+        pre_ids = set(pre_states.keys())
+
+        # only vehicles that existed before and still exist after count for transition comparison
+        common_ids = pre_ids.intersection(post_ids)
+
+        for veh_id in common_ids:
+            pre_state = pre_states[veh_id]
+            post_state = self._tvct_state(veh_id)
+
+            # if out of area after update, skip
+            if post_state is None:
+                continue
+
+            # unpack
+            pre_role, pre_root = pre_state
+            post_role, post_root = post_state
+
+            # same exact state
+            if pre_role == post_role and pre_root == post_root:
+                continue
+
+            # member changing RN inside same root should count 0
+            # since state only stores root for members, this is already handled:
+            # ('MEM', same_root) -> ('MEM', same_root) becomes no change.
+
+            # all other meaningful cluster-affiliation changes count 1
+            tvct_t += 1
+
+        self.tvct_history.append(tvct_t)
+        self.tvct_cumulative += tvct_t
+        self.avg_tvct_history.append(self.tvct_cumulative / len(self.tvct_history))
+
+        return tvct_t, self.avg_tvct_history[-1]
 
     def connected_components(self):
         n = 0  # this would return the minimum number of path needed to connect all the clusters

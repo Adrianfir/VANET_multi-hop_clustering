@@ -35,8 +35,13 @@ if __name__ == "__main__":
     for i in range(configs.iter):
         cluster.update(configs)
         print(cluster.time)
+
+        pre_states = cluster._snapshot_tvct_states()
+
         cluster.update_cluster(cluster.veh_table.ids(), configs)
         cluster.stand_alones_cluster(configs)
+
+        tvct_t, avg_tvct_t = cluster.update_tvct(pre_states)
         # cluster.update_other_connections()
         # cluster.form_net_graph()
         # connection_evaluation = cluster.connected_components()
@@ -60,7 +65,9 @@ if __name__ == "__main__":
     print(f'n_savs: {n_savs}')
     print(f'avg_chs: {sum(n_chs)/len(n_chs)}')
     print(f'avg_stand_alones: {sum(n_savs)/len(n_savs)}')
-    print(f'execution time: {end_time - start_time}')
+
+    print(f'tvct_t:{cluster.tvct_history}\\, avg_tvct:{cluster.avg_tvct_history}')
+    # print(f'execution time: {end_time - start_time}')
     # print(f'all the edges: \n{cluster.net_graph.edges()}')
     ch_high_mems = 0
     for i in cluster.all_chs:
@@ -68,4 +75,6 @@ if __name__ == "__main__":
         if len(temp_table.values(i)['cluster_members'])>10:
             ch_high_mems += 1
     print(f'ch_high_mems: {ch_high_mems}')
+    plt.plot(range(len(cluster.tvct_history)), cluster.tvct_history)
+    plt.plot(range(len(cluster.avg_tvct_history)), cluster.tvct_history)
     plt.show()

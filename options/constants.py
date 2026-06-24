@@ -14,11 +14,11 @@ class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
         trace_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                         joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'sumoTrace_no_bus_and_rsu.xml'))
+                         joinpath('traffic_data', 'final_data_Richmondhill_midsize', 'sumoTrace.xml'))
         sumo_edge_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                             joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'osm.net.xml'))
+                             joinpath('traffic_data', 'final_data_Richmondhill_midsize', 'osm.net.xml'))
         sumo_node_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                             joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'osm_bbox.osm.xml'))
+                             joinpath('traffic_data', 'final_data_Richmondhill_midsize', 'osm_bbox.osm.xml'))
         sumo_trace = xml.dom.minidom.parse(trace_path)
         sumo_edge = xml.dom.minidom.parse(sumo_edge_path)
         sumo_node = xml.dom.minidom.parse(sumo_node_path)
@@ -32,7 +32,7 @@ class Inputs:
         alpha_micro = 0.5
         alpha_meso = 0.75
         alpha_macro= 1
-        veh_trans_range = 400
+        veh_trans_range = 300
         bus_trans_range = 800
         start_time = 1600
         iter = 60
