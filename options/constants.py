@@ -32,7 +32,7 @@ class Inputs:
         alpha_micro = 0.5
         alpha_meso = 0.75
         alpha_macro= 1
-        veh_trans_range = 300
+        veh_trans_range = 100
         bus_trans_range = 800
         start_time = 1600
         iter = 60
@@ -86,6 +86,11 @@ class Inputs:
         max_ch_members = 35
 
         lambda_rn = 1
+
+        # ---------- K-Medoids----------
+        metoids_target_cluster_size = 20
+        metoids_max_cosine_distance = 2
+        metoids_switch_margin = 10
 
 
 
@@ -238,6 +243,18 @@ class Inputs:
 
         parser.add_argument('--lambda_rn', type=float, default=lambda_rn,
                             help='weight for combining local RN parent cost with RN reported join score')
+
+
+        # ---------------------- K-Medoids ----------------------
+
+        parser.add_argument('--metoids_target_cluster_size', type=dict, default=metoids_target_cluster_size,
+                            help='for improving k-medoids')
+        parser.add_argument('--metoids_max_cosine_distance', type=dict, default=metoids_max_cosine_distance,
+                            help='for improving k-medoids')
+        parser.add_argument('--metoids_switch_margin', type=dict, default=metoids_switch_margin,
+                            help='for improving k-medoids')
+
+
 
         self.parser = parser
 
