@@ -32,7 +32,7 @@ class Inputs:
         alpha_micro = 0.5
         alpha_meso = 0.75
         alpha_macro= 1
-        veh_trans_range = 100
+        veh_trans_range = 300
         bus_trans_range = 800
         start_time = 1600
         iter = 60
@@ -88,7 +88,7 @@ class Inputs:
         lambda_rn = 1
 
         # ---------- K-Medoids----------
-        metoids_target_cluster_size = 20
+        metoids_target_cluster_size = 4
         metoids_max_cosine_distance = 2
         metoids_switch_margin = 10
 
