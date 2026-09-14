@@ -1,2 +1,2 @@
 # VANET
-This is my PhD project for handling routing and addressing problems in VANETS
+Multi-hop clustering algorithm for vehicular ad-hoc networks
