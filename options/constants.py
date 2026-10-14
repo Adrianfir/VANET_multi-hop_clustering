@@ -13,12 +13,14 @@ import xml.dom.minidom
 class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
+        data_density = 'smallsize'
         trace_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                         joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'sumoTrace.xml'))
+                         joinpath('traffic_data', 'final_data_Richmondhill_' + data_density,
+                                  'sumoTrace_no_bus_and_rsu.xml'))
         sumo_edge_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                             joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'osm.net.xml'))
+                             joinpath('traffic_data', 'final_data_Richmondhill_' + data_density, 'osm.net.xml'))
         sumo_node_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
-                             joinpath('traffic_data', 'final_data_Richmondhill_smallsize', 'osm_bbox.osm.xml'))
+                             joinpath('traffic_data', 'final_data_Richmondhill_' + data_density, 'osm_bbox.osm.xml'))
         sumo_trace = xml.dom.minidom.parse(trace_path)
         sumo_edge = xml.dom.minidom.parse(sumo_edge_path)
         sumo_node = xml.dom.minidom.parse(sumo_node_path)
@@ -34,8 +36,8 @@ class Inputs:
         alpha_macro= 1
         veh_trans_range = 300
         bus_trans_range = 800
-        start_time = 1600
-        iter = 60
+        start_time = 1500
+        iter = 200
         counter = 3
         priority_counter = 3
         map_zoom = 15.3
