@@ -31,8 +31,8 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = float()
-        alpha_micro = 0.5
-        alpha_meso = 0.75
+        alpha_micro = 0.25
+        alpha_meso = 0.5
         alpha_macro= 1
         veh_trans_range = 300
         bus_trans_range = 800
@@ -45,6 +45,16 @@ class Inputs:
         fps = 5
         weights_s = np.array([1.0, 0.0, 0.0])       # direction's angle, speed, distance for single-hop
         weights_m = np.array([0.6, 0.2, 0.2])       # direction's angle, speed, distance for multi-hop
+
+        # MMZCA physical-link and affinity-aware parent-selection parameters.
+        # Root CH and CM parent candidates share weights_m as physical w_L.
+        omega_meso = 0.5
+        omega_macro = 0.5
+        iota = 0.7
+        v0 = 1.0                           # speed normalization floor (m/s)
+        weights_G = np.array([0.4, 0.4, 0.2])  # bottleneck Q, L_aff, hop depth
+        selection_tolerance = 1e-8
+        delta_bus = 0.05
 
 
         # ---------- New Values I need for new_mmzca ----------
@@ -88,6 +98,15 @@ class Inputs:
         max_ch_members = 35
 
         lambda_rn = 1
+
+        # Sparse micro-zone kernel (initial experimental defaults).
+        # One time step is one beacon period in this simulation.
+        kernel_quantile_samples = 8
+        kernel_ttl = 10
+        kernel_refresh_period = 5
+        kernel_message_delay_ticks = 1
+        # Must upper-bound every physically feasible committed parent edge.
+        kernel_max_edge_range_m = max(veh_trans_range, bus_trans_range)
 
 
 
@@ -140,6 +159,21 @@ class Inputs:
                                                                                        'single-hop clustering')
         parser.add_argument('--weights_m', type=numpy.ndarray, default=weights_m, help='weights used for '
                                                                                        'multi-hop clustering')
+
+        parser.add_argument('--omega_meso', type=float, default=omega_meso,
+                            help='MZOTD meso-zone angular weight')
+        parser.add_argument('--omega_macro', type=float, default=omega_macro,
+                            help='MZOTD macro-zone angular weight')
+        parser.add_argument('--iota', type=float, default=iota,
+                            help='physical-link fraction in affinity-aware L_aff')
+        parser.add_argument('--v0', type=float, default=v0,
+                            help='positive speed mismatch normalization floor (m/s)')
+        parser.add_argument('--weights_G', nargs=3, type=float, default=weights_G,
+                            help='parent score weights: path Q, L_aff, normalized depth')
+        parser.add_argument('--selection_tolerance', type=float, default=selection_tolerance,
+                            help='numerical tolerance for MMZCA score ties')
+        parser.add_argument('--delta_bus', type=float, default=delta_bus,
+                            help='allowable score premium for an eligible bus-rooted parent')
 
 
 
@@ -240,6 +274,18 @@ class Inputs:
 
         parser.add_argument('--lambda_rn', type=float, default=lambda_rn,
                             help='weight for combining local RN parent cost with RN reported join score')
+
+        parser.add_argument('--kernel_quantile_samples', type=int, default=kernel_quantile_samples,
+                            help='number of midpoint quantile samples in each diagonal projection')
+        parser.add_argument('--kernel_ttl', type=int, default=kernel_ttl,
+                            help='maximum kernel-snapshot age measured in beacon periods')
+        parser.add_argument('--kernel_refresh_period', type=int, default=kernel_refresh_period,
+                            help='maximum period between root kernel snapshots in beacon periods')
+        parser.add_argument('--kernel_message_delay_ticks', type=int,
+                            default=kernel_message_delay_ticks,
+                            help='minimum one-hop kernel/report delivery delay in beacon periods')
+        parser.add_argument('--kernel_max_edge_range_m', type=float, default=kernel_max_edge_range_m,
+                            help='conservative upper bound on committed parent link length (meters)')
 
         self.parser = parser
 

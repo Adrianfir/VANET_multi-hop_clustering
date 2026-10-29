@@ -7,7 +7,13 @@ __all__ = [
     'det_near_ch', 'det_near_sa', 'det_pot_ch', 'det_pot_ch_dsca', 'image_num', 'initiate_new_bus',  'initiate_new_veh',
     'mac_address', 'make_slideshow', 'middle_zone', 'presence', 'priority_clusters',  'remove_member',
     'remove_sub_member', 'save_img', 'set_ch', 'set_ch_to_veh', 'sumo_net_info', 'update_bus_table', 'sumo_net_info',
-    'update_sa_net_graph', 'update_veh_table'
+    'update_sa_net_graph', 'update_veh_table',
+    'mmzca_kernel_radius', 'mmzca_build_kernel', 'mmzca_kernel_is_usable',
+    'mmzca_affinity_from_kernel', 'mmzca_raw_affinity_from_kernel',
+    'det_normalized_micro_affinity', 'det_micro_affinity',
+    'mmzca_affinity_status', 'mmzca_latest_root_kernel',
+    'mmzca_note_ch_promotion', 'mmzca_kernel_tick',
+    'mmzca_physical_link', 'choose_mmzca_parent'
 ]
 
 import numpy as np
@@ -45,11 +51,13 @@ def initiate_new_bus(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 pos=float(veh.getAttribute('pos')),
                 lane={'id': veh.getAttribute('lane'), 'timer': 0},
                 micro_zone= micro_zone_id,
-                prev_micro_zone=micro_zone_id,
+                prev_micro_zone=None,
                 meso_zone=meso_zone_id,
-                prev_meso_zone=meso_zone_id,
+                prev_meso_zone=None,
                 macro_zone= macro_zone_id,
-                prev_macro_zone= macro_zone_id,
+                prev_macro_zone=None,
+                meso_zone_changed_this_tick=False,
+                macro_zone_changed_this_tick=False,
                 neighbor_zones=zones.neighbor_zones(macro_zone_id),
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
@@ -58,12 +66,6 @@ def initiate_new_bus(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 message_dest={},
                 message_source={},
                 cluster_head=True,
-                root_ch=veh.getAttribute('id'),
-                parent_node=None,
-                hop_count=0,
-                children_nodes=None,
-                current_root_cost=0.0,
-                current_parent_cost=0.0,
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),
                 sub_cluster_members=set(),
@@ -72,7 +74,30 @@ def initiate_new_bus(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 other_vehs=set(),
                 ip=None,
                 mac=mac_address(),
-                counter=config.counter
+                counter=config.counter,
+                role='CH',
+                root_ch=veh.getAttribute('id'),
+                parent_id=None,
+                parent_node=None,
+                hop_count=0,
+                current_root_cost=0.0,
+                current_parent_cost=0.0,
+                path_bottleneck=0.0,
+                committed_link_score=None,
+                root_connection_valid=True,
+                direct_children=set(),
+                admit_children=True,
+                kernel_root_incarnation=None,
+                kernel_local_root_id=None,
+                kernel_descriptor=None,
+                kernel_subtree_hist={},
+                kernel_subtree_version=0,
+                kernel_child_reports={},
+                kernel_last_signature=None,
+                kernel_known_children=set(),
+                kernel_snapshot_version=0,
+                kernel_last_snapshot_hist=None,
+                kernel_last_snapshot_anchor=None
                 )
 
 
@@ -104,12 +129,13 @@ def initiate_new_veh(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 pos=float(veh.getAttribute('pos')),
                 lane={'id': lane_id, 'timer': 0},
                 micro_zone=micro_zone_id,
-                prev_micro_zone=micro_zone_id,
+                prev_micro_zone=None,
                 meso_zone=meso_zone_id,
-                prev_meso_zone=meso_zone_id,
+                prev_meso_zone=None,
                 macro_zone= macro_zone_id,
-                prev_macro_zone= macro_zone_id,
-                unresolved_start_macro_zone=macro_zone_id,
+                prev_macro_zone=None,
+                meso_zone_changed_this_tick=False,
+                macro_zone_changed_this_tick=False,
                 neighbor_zones=zones.neighbor_zones(macro_zone_id),
                 in_area=presence(understudied_area, veh),
                 arrive_time=None,
@@ -122,11 +148,6 @@ def initiate_new_veh(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 secondary_ch=None,
                 priority_ch=None,
                 priority_counter=config.priority_counter,
-                root_ch=None,
-                parent_node=None,
-                hop_count=None,
-                current_root_cost=None,
-                current_parent_cost=None,
                 other_chs=set(),  # other chs in the trans range of veh.getAttribute('id)
                 cluster_members=set(),  # This will be a Graph if the vehicle is a ch
                 sub_cluster_members=set(),  # cluster members connected to claster through this vehicle would be in this set
@@ -138,7 +159,30 @@ def initiate_new_veh(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 counter=config.counter,  # a counter_time to search and join a cluster
                 start_ch_zone=None,  # This is the zone that vehicle starts becoming a ch
                 cluster_record=LinkedList(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
-                                                 'ef': None,  'timer': None, 'interrupt': list()})  # the linked_list
+                                                 'ef': None,  'timer': None, 'interrupt': list()}),  # the linked_list
+                role='SA',
+                root_ch=None,
+                parent_id=None,
+                parent_node=None,
+                hop_count=None,
+                current_root_cost=None,
+                current_parent_cost=None,
+                path_bottleneck=None,
+                committed_link_score=None,
+                root_connection_valid=False,
+                direct_children=set(),
+                admit_children=True,
+                kernel_root_incarnation=None,
+                kernel_local_root_id=None,
+                kernel_descriptor=None,
+                kernel_subtree_hist={},
+                kernel_subtree_version=0,
+                kernel_child_reports={},
+                kernel_last_signature=None,
+                kernel_known_children=set(),
+                kernel_snapshot_version=0,
+                kernel_last_snapshot_hist=None,
+                kernel_last_snapshot_anchor=None
                 # would record the clusters that this vehicle would join. key is the cluster_head which is None when the
                 # vehicle gets initialized, value['ef'] is the "ef" and value['timer] is the amount of time that this
                 # vehicle would remain in that cluster
@@ -168,9 +212,13 @@ def add_member(ch_id, bus_table,
     :return:
     """
     veh_table.values(veh_id)['primary_ch'] = ch_id
+    veh_table.values(veh_id)['secondary_ch'] = None
     veh_table.values(veh_id)['root_ch'] = ch_id
+    veh_table.values(veh_id)['parent_id'] = ch_id
     veh_table.values(veh_id)['parent_node'] = ch_id
     veh_table.values(veh_id)['hop_count'] = 1
+    veh_table.values(veh_id)['role'] = 'CM'
+    veh_table.values(veh_id)['root_connection_valid'] = True
 
     if ch_id == veh_table.values(veh_id)['priority_ch']:
         veh_table.values(veh_id)['cluster_record'].pop()
@@ -199,12 +247,14 @@ def add_member(ch_id, bus_table,
         update(veh_table.values(veh_id)['other_chs'].union(ch_candidates))
     if 'bus' in ch_id:
         bus_table.values(ch_id)['cluster_members'].add(veh_id)
+        bus_table.values(ch_id).setdefault('direct_children', set()).add(veh_id)
         bus_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
         bus_table.values(ch_id)['gate_chs']. \
             update(bus_table.values(ch_id)['gate_chs'].
                    union(veh_table.values(veh_id)['other_chs']))
     else:
         veh_table.values(ch_id)['cluster_members'].add(veh_id)
+        veh_table.values(ch_id).setdefault('direct_children', set()).add(veh_id)
         veh_table.values(ch_id)['gates'][veh_id] = veh_table.values(veh_id)['other_chs']
         veh_table.values(ch_id)['gate_chs']. \
             update(veh_table.values(ch_id)['gate_chs'].
@@ -243,8 +293,8 @@ def add_sub_member(ch_id, bus_table,
 
     veh_table.values(veh_id)['primary_ch'] = ch_id
     veh_table.values(veh_id)['root_ch'] = ch_id
+    veh_table.values(veh_id)['parent_id'] = sub_ch_id
     veh_table.values(veh_id)['parent_node'] = sub_ch_id
-    veh_table.values(veh_id)['hop_count'] = veh_table.values(sub_ch_id).get('hop_count', 1) + 1
 
     if ch_id == veh_table.values(veh_id)['priority_ch']:
         veh_table.values(veh_id)['cluster_record'].pop()
@@ -262,10 +312,15 @@ def add_sub_member(ch_id, bus_table,
         veh_table.values(veh_id)['cluster_record'].tail.value['interrupt'] = list()
 
     veh_table.values(veh_id)['secondary_ch'] = sub_ch_id
+    veh_table.values(veh_id)['hop_count'] = (veh_table.values(sub_ch_id).get('hop_count') or 1) + 1
+    veh_table.values(veh_id)['role'] = 'CM'
+    veh_table.values(veh_id)['root_connection_valid'] = True
+    veh_table.values(sub_ch_id)['role'] = 'RN'
     veh_table.values(veh_id)['priority_ch'] = ch_id
     veh_table.values(veh_id)['priority_counter'] = config.priority_counter
     veh_table.values(veh_id)['counter'] = config.counter
     veh_table.values(sub_ch_id)['sub_cluster_members'].add(veh_id)
+    veh_table.values(sub_ch_id).setdefault('direct_children', set()).add(veh_id)
 
     if 'bus' not in ch_id:
         if ch_id in ch_candidates:  # in multi-hop and when the vehicle joining the cluster through sub_ch,
@@ -308,11 +363,20 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
     :param mem_stays:
     :return:
     """
-    temp_sub_mem = veh_table.values(mem)['sub_cluster_members'].copy()
+    # Use actual immediate parent pointers. The older sub_cluster_members
+    # representation may include grandchildren but is not authoritative for
+    # arbitrary-depth MMZCA trees.
+    temp_sub_mem = {
+        node_id for node_id in veh_table.ids() if node_id != mem and
+        (veh_table.values(node_id).get('parent_node') or
+         veh_table.values(node_id).get('parent_id') or
+         veh_table.values(node_id).get('secondary_ch')) == mem
+    }
     for s_m in temp_sub_mem:
         (veh_table, bus_table,
          stand_alone, zone_stand_alone) = remove_sub_member(s_m, mem, ch_id, veh_table, bus_table, config,
-                                                            stand_alone, zone_stand_alone)
+                                                            stand_alone, zone_stand_alone,
+                                                            ch_stays=ch_stays)
     veh_table.values(mem)['counter'] = config.counter
     if ch_stays is True:
         veh_table.values(mem)['priority_ch'] = ch_id
@@ -320,17 +384,27 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
         veh_table.values(mem)['priority_ch'] = None
     veh_table.values(mem)['priority_counter'] = config.priority_counter
     if 'bus' in ch_id:
-        bus_table.values(ch_id)['cluster_members'].remove(mem)
+        bus_table.values(ch_id)['cluster_members'].discard(mem)
+        bus_table.values(ch_id).setdefault('direct_children', set()).discard(mem)
     else:
-        veh_table.values(ch_id)['cluster_members'].remove(mem)
+        veh_table.values(ch_id)['cluster_members'].discard(mem)
+        veh_table.values(ch_id).setdefault('direct_children', set()).discard(mem)
     if mem_stays is True:
         stand_alone.add(mem)
         zone_stand_alone[veh_table.values(mem)['macro_zone']].add(mem)
     veh_table.values(mem)['primary_ch'] = None
     veh_table.values(mem)['secondary_ch'] = None
     veh_table.values(mem)['root_ch'] = None
+    veh_table.values(mem)['parent_id'] = None
     veh_table.values(mem)['parent_node'] = None
     veh_table.values(mem)['hop_count'] = None
+    veh_table.values(mem)['path_bottleneck'] = None
+    veh_table.values(mem)['committed_link_score'] = None
+    veh_table.values(mem)['root_connection_valid'] = False
+    veh_table.values(mem)['direct_children'] = set()
+    veh_table.values(mem)['sub_cluster_members'] = set()
+    veh_table.values(mem)['kernel_descriptor'] = None
+    veh_table.values(mem)['role'] = 'SA'
     veh_table.values(mem)['current_root_cost'] = None
     veh_table.values(mem)['current_parent_cost'] = None
     veh_table.values(mem)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
@@ -341,7 +415,8 @@ def remove_member(mem, ch_id, veh_table, bus_table, config,
 
 
 def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config,
-                      stand_alone, zone_stand_alone, ch_stays=True, sub_mem_stays=True):
+                      stand_alone, zone_stand_alone, ch_stays=True, sub_mem_stays=True,
+                      _visited=None):
     """
     This function would remove a sub_cluster member from the cluster
     :type
@@ -358,6 +433,28 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     :param sub_mem_stays:
     :return:
     """
+    if _visited is None:
+        _visited = set()
+    if sub_mem_id in _visited:
+        return veh_table, bus_table, stand_alone, zone_stand_alone
+    _visited.add(sub_mem_id)
+
+    # Detach descendants before their parent to avoid broken intermediate
+    # paths during recursive MMZCA removal.
+    descendants = {
+        node_id for node_id in veh_table.ids() if node_id != sub_mem_id and
+        (veh_table.values(node_id).get('parent_node') or
+         veh_table.values(node_id).get('parent_id') or
+         veh_table.values(node_id).get('secondary_ch')) == sub_mem_id
+    }
+    for descendant_id in descendants:
+        veh_table, bus_table, stand_alone, zone_stand_alone = remove_sub_member(
+            descendant_id, sub_mem_id, ch_id, veh_table, bus_table, config,
+            stand_alone, zone_stand_alone, ch_stays=ch_stays,
+            _visited=_visited
+        )
+
+    veh_table.values(sub_mem_id)['counter'] = config.counter
     if ch_stays is True:
         veh_table.values(sub_mem_id)['priority_ch'] = ch_id
     else:
@@ -366,17 +463,28 @@ def remove_sub_member(sub_mem_id, sub_ch_id, ch_id, veh_table, bus_table, config
     if sub_mem_stays is True:
         stand_alone.add(sub_mem_id)
         zone_stand_alone[veh_table.values(sub_mem_id)['macro_zone']].add(sub_mem_id)
-    veh_table.values(sub_ch_id)['sub_cluster_members'].remove(sub_mem_id)
+    parent = veh_table.values(sub_ch_id)
+    parent['sub_cluster_members'].discard(sub_mem_id)
+    parent.setdefault('direct_children', set()).discard(sub_mem_id)
+    if not parent['direct_children'] and parent.get('role') == 'RN':
+        parent['role'] = 'CM'
     if 'bus' in ch_id:
-        bus_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
+        bus_table.values(ch_id)['sub_cluster_members'].discard(sub_mem_id)
     else:
-        veh_table.values(ch_id)['sub_cluster_members'].remove(sub_mem_id)
+        veh_table.values(ch_id)['sub_cluster_members'].discard(sub_mem_id)
     veh_table.values(sub_mem_id)['primary_ch'] = None
     veh_table.values(sub_mem_id)['secondary_ch'] = None
-    veh_table.values(sub_mem_id)['secondary_ch'] = None
     veh_table.values(sub_mem_id)['root_ch'] = None
+    veh_table.values(sub_mem_id)['parent_id'] = None
     veh_table.values(sub_mem_id)['parent_node'] = None
     veh_table.values(sub_mem_id)['hop_count'] = None
+    veh_table.values(sub_mem_id)['path_bottleneck'] = None
+    veh_table.values(sub_mem_id)['committed_link_score'] = None
+    veh_table.values(sub_mem_id)['root_connection_valid'] = False
+    veh_table.values(sub_mem_id)['direct_children'] = set()
+    veh_table.values(sub_mem_id)['sub_cluster_members'] = set()
+    veh_table.values(sub_mem_id)['kernel_descriptor'] = None
+    veh_table.values(sub_mem_id)['role'] = 'SA'
     veh_table.values(sub_mem_id)['current_root_cost'] = None
     veh_table.values(sub_mem_id)['current_parent_cost'] = None
     veh_table.values(sub_mem_id)['cluster_record'].append(None,
@@ -402,10 +510,17 @@ def set_ch(veh_id, veh_table, all_chs, stand_alone,
     :return:
     """
     veh_table.values(veh_id)['cluster_head'] = True
-    veh_table.values(veh_id)['cluster_record'].tail.value['is_ch'] = True
+    veh_table.values(veh_id)['role'] = 'CH'
     veh_table.values(veh_id)['root_ch'] = veh_id
+    veh_table.values(veh_id)['parent_id'] = None
     veh_table.values(veh_id)['parent_node'] = None
     veh_table.values(veh_id)['hop_count'] = 0
+    veh_table.values(veh_id)['path_bottleneck'] = 0.0
+    veh_table.values(veh_id)['committed_link_score'] = None
+    veh_table.values(veh_id)['root_connection_valid'] = True
+    veh_table.values(veh_id)['direct_children'] = set()
+    veh_table.values(veh_id)['secondary_ch'] = None
+    veh_table.values(veh_id)['cluster_record'].tail.value['is_ch'] = True
     veh_table.values(veh_id)['start_ch_zone'] = veh_table.values(veh_id)['macro_zone']
     all_chs.add(veh_id)
     zone_ch[veh_table.values(veh_id)['macro_zone']].add(veh_id)
@@ -439,10 +554,20 @@ def set_ch_to_veh(veh_id, veh_table, zone_ch,
     :return:
     """
     veh_table.values(veh_id)['cluster_members'] = set()
+    veh_table.values(veh_id)['sub_cluster_members'] = set()
     veh_table.values(veh_id)['cluster_head'] = False
+    veh_table.values(veh_id)['role'] = 'SA'
     veh_table.values(veh_id)['root_ch'] = None
+    veh_table.values(veh_id)['parent_id'] = None
     veh_table.values(veh_id)['parent_node'] = None
     veh_table.values(veh_id)['hop_count'] = None
+    veh_table.values(veh_id)['path_bottleneck'] = None
+    veh_table.values(veh_id)['committed_link_score'] = None
+    veh_table.values(veh_id)['root_connection_valid'] = False
+    veh_table.values(veh_id)['direct_children'] = set()
+    veh_table.values(veh_id)['kernel_descriptor'] = None
+    veh_table.values(veh_id)['secondary_ch'] = None
+    veh_table.values(veh_id)['primary_ch'] = None
     veh_table.values(veh_id)['current_root_cost'] = None
     veh_table.values(veh_id)['current_parent_cost'] = None
     veh_table.values(veh_id)['cluster_record'].append(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
@@ -452,7 +577,6 @@ def set_ch_to_veh(veh_id, veh_table, zone_ch,
     all_chs.remove(veh_id)
     stand_alone.add(veh_id)
     zone_stand_alone[veh_table.values(veh_id)['macro_zone']].add(veh_id)
-    veh_table.values(veh_id)['unresolved_start_macro_zone'] = veh_table.values(veh_id)['macro_zone']
     return (veh_table, zone_ch, all_chs,
             stand_alone, zone_stand_alone)
 
@@ -541,7 +665,7 @@ def det_near_ch(veh_id, veh_table, bus_table,
                                  veh_table.values(j)['trans_range']):
             if veh_table.values(j)['cluster_head'] is True:
                 ch_candidates.add(j)
-            elif (veh_table.values(j)['primary_ch'] is not None) and (veh_table.values(j)['secondary_ch'] is None):
+            elif veh_table.values(j)['primary_ch'] is not None:
                 sub_ch_candidates.add(j)
                 other_vehs.add(j)
             elif veh_table.values(j)['primary_ch'] is None:
@@ -798,6 +922,12 @@ def update_bus_table(veh, bus_table, micro_zone_id, meso_zone_id, macro_zone_id,
     veh_id = veh.getAttribute('id')
     if veh_id in bus_table.ids():
         veh_bus_table = bus_table.values(veh_id)
+        veh_bus_table['meso_zone_changed_this_tick'] = (
+            veh_bus_table['meso_zone'] != meso_zone_id
+        )
+        veh_bus_table['macro_zone_changed_this_tick'] = (
+            veh_bus_table['macro_zone'] != macro_zone_id
+        )
         if veh_bus_table['micro_zone'] != micro_zone_id:
             veh_bus_table['prev_micro_zone'] = \
                 veh_bus_table['micro_zone']  # update prev_micro_zone
@@ -867,11 +997,18 @@ def update_veh_table(veh, veh_table, micro_zone_id, meso_zone_id, macro_zone_id,
     veh_id = veh.getAttribute('id')
     if veh_id in veh_table.ids():
         veh_veh_table = veh_table.values(veh_id)
-        if veh_veh_table['micro_zone'] !=  micro_zone_id:
+        old_macro_zone = veh_veh_table['macro_zone']
+        veh_veh_table['meso_zone_changed_this_tick'] = (
+            veh_veh_table['meso_zone'] != meso_zone_id
+        )
+        veh_veh_table['macro_zone_changed_this_tick'] = (
+            veh_veh_table['macro_zone'] != macro_zone_id
+        )
+        if veh_veh_table['micro_zone'] != micro_zone_id:
             veh_veh_table['prev_micro_zone'] = \
                 veh_veh_table['micro_zone']  # update prev_micro_zone
 
-        if veh_veh_table['meso_zone'] !=  meso_zone_id:
+        if veh_veh_table['meso_zone'] != meso_zone_id:
             veh_veh_table['prev_meso_zone'] = \
                 veh_veh_table['meso_zone']  # update prev_meso_zone
 
@@ -915,8 +1052,7 @@ def update_veh_table(veh, veh_table, micro_zone_id, meso_zone_id, macro_zone_id,
         elif (veh_veh_table['cluster_head'] is False) and \
                 (veh_veh_table['primary_ch'] is None):
             stand_alone.add(veh_id)
-            if veh_id in zone_stand_alone[veh_veh_table['prev_macro_zone']]:
-                zone_stand_alone[veh_veh_table['prev_macro_zone']].remove(veh_id)
+            zone_stand_alone[old_macro_zone].discard(veh_id)
 
             zone_stand_alone[macro_zone_id].add(veh_id)
 
@@ -1231,3 +1367,839 @@ def other_connections_update(veh_table, bus_table, zone_ch,
 
     return veh_table, bus_table
 
+
+"""MMZCA kernel utilities to append to the existing ``utils/util.py``.
+
+No replacement data store is introduced: every node and kernel descriptor lives
+in the existing ``veh_table`` or ``bus_table`` HashTable record.
+
+Call ``mmzca_kernel_tick`` once per simulation tick AFTER cluster maintenance.
+It models subtree-histogram updates and sketch distribution as one-hop messages
+delivered at the next beacon tick. The caller owns the message queue and the
+root-incarnation registry, e.g. as attributes of its existing DataTable.
+"""
+
+import math
+
+
+def _mmzca_node(node_id, veh_table, bus_table):
+    """Return (record, containing HashTable), or (None, None)."""
+    record = veh_table.values(node_id)
+    if record is not None:
+        return record, veh_table
+    record = bus_table.values(node_id)
+    return (record, bus_table) if record is not None else (None, None)
+
+
+def _mmzca_is_root(node_id, veh_table, bus_table):
+    record, table = _mmzca_node(node_id, veh_table, bus_table)
+    return record is not None and (table is bus_table or record.get('cluster_head') is True)
+
+
+def _mmzca_root_id(node_id, record, veh_table, bus_table):
+    if _mmzca_is_root(node_id, veh_table, bus_table):
+        return node_id
+    return record.get('root_ch') or record.get('primary_ch')
+
+
+def _mmzca_parent_id(record):
+    # Generalized fields first; retain legacy SMZCA fields as fallback.
+    return (record.get('parent_node') or record.get('parent_id') or
+            record.get('secondary_ch') or record.get('primary_ch'))
+
+
+def _mmzca_micro_rc(zone_id, micro_zones):
+    """Existing zone IDs are 'mic_zoneN', with zero-based row-major N."""
+    if not isinstance(zone_id, str) or not zone_id.startswith('mic_zone'):
+        return None
+    try:
+        index = int(zone_id[len('mic_zone'):])
+        if not 0 <= index < micro_zones.n_rows * micro_zones.n_cols:
+            return None
+        return divmod(index, micro_zones.n_cols)
+    except (ValueError, TypeError, ZeroDivisionError):
+        return None
+
+
+def mmzca_kernel_radius(config):
+    """r_K in MICRO-cell units; alpha_micro is in km, ranges are in m.
+
+    ``kernel_max_edge_range_m`` must be an actual upper bound on *all*
+    committed parent-link lengths. Using the largest configured vehicle/bus
+    transmission range gives a conservative bound for reciprocal links.
+    """
+    h_max = int(config.h_max)
+    alpha_micro_km = float(config.alpha_micro)
+    max_range_m = float(config.kernel_max_edge_range_m)
+    if h_max < 1 or alpha_micro_km <= 0 or max_range_m <= 0:
+        raise ValueError('Invalid H_max, alpha_micro, or kernel edge-length bound')
+    return int(math.ceil((h_max - 1) * max_range_m / (1000.0 * alpha_micro_km)))
+
+
+def _mmzca_midpoint_quantiles(weighted_values, count):
+    """M inverse-empirical-CDF samples at q_l=(l+1/2)/M.
+
+    weighted_values is an iterable of (coordinate, positive multiplicity).
+    Counts preserve the member-weighted occupancy distribution without
+    expanding every histogram entry into an individual observation.
+    """
+    items = sorted((float(v), int(w)) for v, w in weighted_values if int(w) > 0)
+    total = sum(w for _, w in items)
+    if total == 0 or count <= 0:
+        return []
+    samples = []
+    cumulative = 0
+    idx = 0
+    for ell in range(count):
+        target = (ell + 0.5) * total / count
+        while idx < len(items) - 1 and cumulative + items[idx][1] < target:
+            cumulative += items[idx][1]
+            idx += 1
+        samples.append(items[idx][0])
+    return samples
+
+
+def mmzca_build_kernel(root_id, incarnation, snapshot_version, now,
+                       root_micro_zone, absolute_histogram, micro_zones,
+                       config):
+    """Build K_h from ACCEPTED sparse subtree reports at root h.
+
+    absolute_histogram maps micro-zone ID to the COUNT of eligible CMs.
+    It must exclude the root and depth-H_max members. This function does not
+    scan all members or reconstruct a global cluster-membership list.
+    """
+    anchor = _mmzca_micro_rc(root_micro_zone, micro_zones)
+    if anchor is None:
+        return None
+    r_k = mmzca_kernel_radius(config)
+    M = int(config.kernel_quantile_samples)
+    if M < 1:
+        raise ValueError('kernel_quantile_samples must be positive')
+
+    rho_weights = []
+    sigma_weights = []
+    for zone_id, count in absolute_histogram.items():
+        rc = _mmzca_micro_rc(zone_id, micro_zones)
+        if rc is None or int(count) <= 0:
+            continue
+        u, v = rc[0] - anchor[0], rc[1] - anchor[1]
+        rho_weights.append((u + v, count))
+        sigma_weights.append((u - v, count))
+
+    # For H_max=1, no CM is eligible to act as a parent.
+    rho_hat = _mmzca_midpoint_quantiles(rho_weights, M) if r_k > 0 else []
+    sigma_hat = _mmzca_midpoint_quantiles(sigma_weights, M) if r_k > 0 else []
+    return {
+        'root_id': root_id,
+        'incarnation': incarnation,
+        'snapshot_version': snapshot_version,
+        'generation_time': now,
+        'anchor_rc': anchor,
+        'k': 2 * r_k + 1,
+        'M': M,
+        'rho_samples': rho_hat,
+        'sigma_samples': sigma_hat,
+    }
+
+
+def mmzca_kernel_is_usable(kernel, root_id, incarnation, now, t_ker):
+    """Check the root, incarnation, nonempty sketch, and timestamp bounds."""
+    if not isinstance(kernel, dict) or incarnation is None:
+        return False
+    if kernel.get('root_id') != root_id or kernel.get('incarnation') != incarnation:
+        return False
+    try:
+        age = float(now) - float(kernel['generation_time'])
+        k, M = int(kernel['k']), int(kernel['M'])
+        rho, sigma = kernel['rho_samples'], kernel['sigma_samples']
+        anchor = kernel['anchor_rc']
+        return (
+            math.isfinite(age) and 0 <= age <= float(t_ker)
+            and k >= 3 and k % 2 == 1 and M > 0
+            and len(rho) == M and len(sigma) == M
+            and len(anchor) == 2
+            and all(math.isfinite(float(x)) for x in rho)
+            and all(math.isfinite(float(x)) for x in sigma)
+        )
+    except (ValueError, TypeError, KeyError, OverflowError):
+        return False
+
+
+def mmzca_affinity_from_kernel(veh_id, root_id, veh_table, micro_zones,
+                               kernel, incarnation, now, t_ker):
+    """Return (A_tilde, usable) for the versioned diagonal sketch.
+
+    Per the requested simulation convention, an unusable kernel has numeric
+    A_tilde=0. The boolean MUST be retained when implementing the paper's
+    mixed-freshness parent-selection/fallback rule.
+    """
+    A_hat, usable = mmzca_raw_affinity_from_kernel(
+        veh_id, root_id, veh_table, micro_zones,
+        kernel, incarnation, now, t_ker
+    )
+    if not usable:
+        return 0.0, False
+    try:
+        r_k = (int(kernel['k']) - 1) // 2
+        return min(1.0, max(0.0, A_hat / r_k)), True
+    except (KeyError, ValueError, TypeError, ZeroDivisionError):
+        return 0.0, False
+
+
+def mmzca_raw_affinity_from_kernel(veh_id, root_id, veh_table, micro_zones,
+                                   kernel, incarnation, now, t_ker):
+    """Return (A_hat, usable), where A_hat is in MICRO-zone grid units."""
+    if not mmzca_kernel_is_usable(kernel, root_id, incarnation, now, t_ker):
+        return 0.0, False
+    record = veh_table.values(veh_id)
+    if record is None:
+        return 0.0, False
+    current_rc = _mmzca_micro_rc(record.get('micro_zone'), micro_zones)
+    if current_rc is None:
+        return 0.0, False
+    try:
+        root_row, root_col = kernel['anchor_rc']  # NEVER the root's new position
+        u, v = current_rc[0] - root_row, current_rc[1] - root_col
+        rho_i, sigma_i = u + v, u - v
+        M = int(kernel['M'])
+        rho_sum = sum(abs(rho_i - x) for x in kernel['rho_samples'])
+        sigma_sum = sum(abs(sigma_i - x) for x in kernel['sigma_samples'])
+        A_hat = (rho_sum + sigma_sum) / (2.0 * M)
+        return (A_hat, True) if math.isfinite(A_hat) else (0.0, False)
+    except (KeyError, ValueError, TypeError, ZeroDivisionError):
+        return 0.0, False
+
+
+def det_normalized_micro_affinity(veh_id, parent_id, veh_table, bus_table,
+                                  micro_zones, current_time, t_ker):
+    """Return A_tilde(i|root(j)), with user's zero rules for CH/stale.
+
+    A root-CH candidate j -> 0.0. Missing/expired/invalid kernel -> 0.0.
+    Otherwise use the latest K_h that candidate parent j can advertise.
+    """
+    if _mmzca_is_root(parent_id, veh_table, bus_table):
+        return 0.0
+    parent, _ = _mmzca_node(parent_id, veh_table, bus_table)
+    if parent is None:
+        return 0.0
+    root_id = _mmzca_root_id(parent_id, parent, veh_table, bus_table)
+    score, _ = mmzca_affinity_from_kernel(
+        veh_id, root_id, veh_table, micro_zones,
+        parent.get('kernel_descriptor'), parent.get('kernel_root_incarnation'),
+        current_time, t_ker
+    )
+    return score
+
+
+def det_micro_affinity(veh_id, parent_id, veh_table, bus_table,
+                       micro_zones, current_time, t_ker):
+    """Return unnormalized A_hat(i|h) with the same CH/stale -> 0 rule."""
+    if _mmzca_is_root(parent_id, veh_table, bus_table):
+        return 0.0
+    parent, _ = _mmzca_node(parent_id, veh_table, bus_table)
+    if parent is None:
+        return 0.0
+    root_id = _mmzca_root_id(parent_id, parent, veh_table, bus_table)
+    score, _ = mmzca_raw_affinity_from_kernel(
+        veh_id, root_id, veh_table, micro_zones,
+        parent.get('kernel_descriptor'), parent.get('kernel_root_incarnation'),
+        current_time, t_ker
+    )
+    return score
+
+
+def mmzca_affinity_status(veh_id, parent_id, veh_table, bus_table,
+                          micro_zones, current_time, t_ker):
+    """Companion (value, status) for selection: valid/root_ch/unavailable.
+
+    Even though root CH and stale cases have A_tilde=0 by convention, they
+    should not be confused with a measured perfect spatial match.
+    """
+    if _mmzca_is_root(parent_id, veh_table, bus_table):
+        return 0.0, 'root_ch'
+    parent, _ = _mmzca_node(parent_id, veh_table, bus_table)
+    if parent is None:
+        return 0.0, 'unavailable'
+    root_id = _mmzca_root_id(parent_id, parent, veh_table, bus_table)
+    score, valid = mmzca_affinity_from_kernel(
+        veh_id, root_id, veh_table, micro_zones,
+        parent.get('kernel_descriptor'), parent.get('kernel_root_incarnation'),
+        current_time, t_ker
+    )
+    return score, 'valid' if valid else 'unavailable'
+
+
+def mmzca_latest_root_kernel(root_id, parent_ids, veh_table, bus_table,
+                             now, t_ker):
+    """SA's latest *one-hop-advertised* valid descriptor for root h.
+
+    Compare multiple parents of the SAME root against the same snapshot when
+    possible, as required by the same-root affinity property. No remote CH
+    state or global cluster-membership list is consulted.
+    """
+    selected = None
+    for parent_id in parent_ids:
+        if _mmzca_is_root(parent_id, veh_table, bus_table):
+            continue
+        parent, _ = _mmzca_node(parent_id, veh_table, bus_table)
+        if parent is None or _mmzca_root_id(parent_id, parent, veh_table, bus_table) != root_id:
+            continue
+        descriptor = parent.get('kernel_descriptor')
+        if not mmzca_kernel_is_usable(
+                descriptor, root_id, parent.get('kernel_root_incarnation'), now, t_ker):
+            continue
+        if selected is None or (
+            descriptor['incarnation'], descriptor['snapshot_version'], descriptor['generation_time']
+        ) > (
+            selected['incarnation'], selected['snapshot_version'], selected['generation_time']
+        ):
+            selected = descriptor
+    return selected
+
+
+def _mmzca_init_kernel_fields(record):
+    """Add kernel state to an existing veh_table/bus_table dictionary in place."""
+    record.setdefault('kernel_root_incarnation', None)
+    record.setdefault('kernel_local_root_id', None)
+    record.setdefault('kernel_descriptor', None)
+    record.setdefault('kernel_subtree_hist', {})
+    record.setdefault('kernel_subtree_version', 0)
+    record.setdefault('kernel_child_reports', {})
+    record.setdefault('kernel_last_signature', None)
+    record.setdefault('kernel_known_children', set())
+    record.setdefault('kernel_snapshot_version', 0)
+    record.setdefault('kernel_last_snapshot_hist', None)
+    record.setdefault('kernel_last_snapshot_anchor', None)
+
+
+def mmzca_note_ch_promotion(root_id, root_registry):
+    """Call on ordinary-vehicle SA->CH promotion (including same-tick reuse).
+
+    This event hook prevents an unobserved CH->SA->CH transition within one
+    simulation tick from reusing a previous incarnation identifier.
+    """
+    state = root_registry.setdefault(root_id, {'epoch': 0, 'active': False})
+    state['epoch'] += 1
+    state['active'] = True
+    return state['epoch']
+
+
+def _mmzca_valid_affiliations(veh_table, bus_table, root_epochs, h_max,
+                               distance_fn):
+    """Reference simulator validation of locally committed parent chains.
+
+    The resulting map is used for message delivery and admission to the
+    kernel protocol, not as a remote CH list exposed to an SA.
+    """
+    all_ids = veh_table.ids() | bus_table.ids()
+    memo = {}
+    visiting = set()
+
+    def validate(node_id):
+        if node_id in memo:
+            return memo[node_id]
+        if node_id in visiting or node_id not in all_ids:
+            return None
+        visiting.add(node_id)
+        node, table = _mmzca_node(node_id, veh_table, bus_table)
+        result = None
+        if _mmzca_is_root(node_id, veh_table, bus_table):
+            if node_id in root_epochs:
+                result = (node_id, None, 0, root_epochs[node_id]['epoch'])
+        else:
+            root_id = _mmzca_root_id(node_id, node, veh_table, bus_table)
+            parent_id = _mmzca_parent_id(node)
+            depth = node.get('hop_count')
+            if root_id and parent_id and parent_id != node_id:
+                parent_info = validate(parent_id)
+                if parent_info is not None:
+                    parent_root, _, parent_depth, epoch = parent_info
+                    if (root_id == parent_root and isinstance(depth, int)
+                            and depth == parent_depth + 1 and depth <= h_max):
+                        parent, parent_table = _mmzca_node(parent_id, veh_table, bus_table)
+                        try:
+                            d = distance_fn(node_id, table, parent_id, parent_table)
+                            feasible = (math.isfinite(d) and d <= min(
+                                float(node['trans_range']), float(parent['trans_range'])))
+                        except (TypeError, ValueError, KeyError):
+                            feasible = False
+                        if feasible:
+                            result = (root_id, parent_id, depth, epoch)
+        visiting.remove(node_id)
+        memo[node_id] = result
+        return result
+
+    for node_id in all_ids:
+        validate(node_id)
+    return {node_id: info for node_id, info in memo.items() if info is not None}
+
+
+def mmzca_kernel_tick(veh_table, bus_table, micro_zones, config, now,
+                      pending_messages, root_registry, stats=None,
+                      distance_fn=None):
+    """Advance versioned histograms and propagated kernels one beacon tick.
+
+    Mutates ONLY node dictionaries in the existing two hash tables, the
+    caller-owned root_registry, and stats. Returns the next pending-message
+    list. Every queued message has a one-hop delivery delay of one tick.
+
+    Call after DataTable.update_cluster and stand_alones_cluster. Parent
+    selection then reads the previous delivered snapshot from candidate j.
+    """
+    if distance_fn is None:
+        distance_fn = det_dist  # existing function in the user's util.py
+    if stats is None:
+        stats = {}
+    stats.setdefault('kernel_messages_sent', 0)
+    stats.setdefault('kernel_control_bytes_est', 0)
+
+    active_ids = veh_table.ids() | bus_table.ids()
+    active_roots = {n for n in active_ids if _mmzca_is_root(n, veh_table, bus_table)}
+    for root_id, state in root_registry.items():
+        if root_id not in active_roots:
+            state['active'] = False
+    for root_id in active_roots:
+        state = root_registry.setdefault(root_id, {'epoch': 0, 'active': False})
+        # Epoch advances only when a node newly becomes a CH. The prior
+        # inactive state is preserved across ticks and departures.
+        if state['epoch'] == 0 or not state['active']:
+            state['epoch'] += 1
+        state['active'] = True
+
+    for node_id in active_ids:
+        node, _ = _mmzca_node(node_id, veh_table, bus_table)
+        _mmzca_init_kernel_fields(node)
+
+    info = _mmzca_valid_affiliations(
+        veh_table, bus_table, root_registry, int(config.h_max), distance_fn
+    )
+    children = {node_id: set() for node_id in info}
+    for node_id, (_, parent_id, _, _) in info.items():
+        if parent_id is not None:
+            children[parent_id].add(node_id)
+
+    # Assign only simulation-level incarnation metadata to committed nodes.
+    for node_id in active_ids:
+        node, _ = _mmzca_node(node_id, veh_table, bus_table)
+        expected_epoch = info[node_id][3] if node_id in info else None
+        expected_root_id = info[node_id][0] if node_id in info else None
+        if (node.get('kernel_root_incarnation') != expected_epoch
+                or node.get('kernel_local_root_id') != expected_root_id):
+            node['kernel_descriptor'] = None
+            node['kernel_child_reports'] = {}
+            node['kernel_last_signature'] = None
+            node['kernel_known_children'] = set()
+        node['kernel_root_incarnation'] = expected_epoch
+        node['kernel_local_root_id'] = expected_root_id
+
+    next_messages = []
+
+    message_delay = int(config.kernel_message_delay_ticks)
+    if message_delay < 1:
+        raise ValueError('kernel_message_delay_ticks must be at least 1')
+
+    def send(kind, sender, receiver, payload):
+        msg = {'deliver_at': now + message_delay, 'kind': kind, 'sender': sender,
+               'receiver': receiver, 'payload': payload}
+        next_messages.append(msg)
+        stats['kernel_messages_sent'] += 1
+        # Deterministic payload-size proxy; it is not a PHY/MAC byte model.
+        stats['kernel_control_bytes_est'] += len(repr(msg).encode('utf-8'))
+
+    # Receive only previously queued, physically feasible one-hop messages.
+    for msg in pending_messages:
+        if msg['deliver_at'] > now:
+            next_messages.append(msg)
+            continue
+        sender, receiver = msg['sender'], msg['receiver']
+        if sender not in info or receiver not in info:
+            continue
+        payload = msg['payload']
+        receiver_rec, _ = _mmzca_node(receiver, veh_table, bus_table)
+        if msg['kind'] == 'hist':
+            if info[sender][1] != receiver or info[sender][0] != info[receiver][0]:
+                continue
+            if payload['root_id'] != info[receiver][0] or payload['epoch'] != info[receiver][3]:
+                continue
+            cache = receiver_rec['kernel_child_reports']
+            old = cache.get(sender)
+            if old is None or payload['version'] > old['version']:
+                cache[sender] = {'version': payload['version'],
+                                 'hist': dict(payload['hist'])}
+        elif msg['kind'] == 'kernel':
+            if info[receiver][1] != sender or info[receiver][0] != info[sender][0]:
+                continue
+            if payload is None:
+                continue
+            if (payload.get('root_id') != info[receiver][0]
+                    or payload.get('incarnation') != info[receiver][3]):
+                continue
+            old = receiver_rec.get('kernel_descriptor')
+            newer = (old is None or old.get('incarnation') != payload['incarnation']
+                     or old.get('snapshot_version', -1) < payload['snapshot_version'])
+            if newer:
+                receiver_rec['kernel_descriptor'] = payload
+                for child in children.get(receiver, ()):
+                    send('kernel', receiver, child, payload)
+
+    # Discard reports for no-longer-committed immediate children.
+    for node_id in info:
+        node, _ = _mmzca_node(node_id, veh_table, bus_table)
+        cache = node['kernel_child_reports']
+        for old_child in list(cache):
+            if old_child not in children[node_id]:
+                del cache[old_child]
+
+    # A node includes itself only when it is an eligible CM. Accepted child
+    # reports are REPLACED by version, never added repeatedly.
+    for node_id, (root_id, parent_id, depth, epoch) in info.items():
+        node, _ = _mmzca_node(node_id, veh_table, bus_table)
+        own_zone = node.get('micro_zone')
+        eligible = 1 <= depth <= int(config.h_max) - 1
+        own = {own_zone: 1} if eligible and _mmzca_micro_rc(own_zone, micro_zones) else {}
+        hist = dict(own)
+        for child_report in node['kernel_child_reports'].values():
+            for zone_id, count in child_report['hist'].items():
+                hist[zone_id] = hist.get(zone_id, 0) + count
+        signature = (root_id, parent_id, depth, epoch, own_zone, tuple(sorted(hist.items())))
+        if signature != node['kernel_last_signature']:
+            node['kernel_subtree_hist'] = hist
+            node['kernel_subtree_version'] += 1
+            node['kernel_last_signature'] = signature
+            if parent_id is not None:
+                send('hist', node_id, parent_id, {
+                    'root_id': root_id, 'epoch': epoch,
+                    'version': node['kernel_subtree_version'], 'hist': hist
+                })
+
+    # Root CH constructs a timestamped snapshot only from received reports.
+    for root_id in active_roots:
+        if root_id not in info:
+            continue
+        root, _ = _mmzca_node(root_id, veh_table, bus_table)
+        histogram = root['kernel_subtree_hist']
+        anchor_zone = root.get('micro_zone')
+        refresh_period = max(1, int(config.kernel_refresh_period))
+        old = root.get('kernel_descriptor')
+        must_refresh = (
+            old is None
+            or old.get('incarnation') != info[root_id][3]
+            or root['kernel_last_snapshot_hist'] != histogram
+            or root['kernel_last_snapshot_anchor'] != anchor_zone
+            or now - old['generation_time'] >= refresh_period
+        )
+        if must_refresh:
+            root['kernel_snapshot_version'] += 1
+            descriptor = mmzca_build_kernel(
+                root_id, info[root_id][3], root['kernel_snapshot_version'],
+                now, anchor_zone, histogram, micro_zones, config
+            )
+            root['kernel_descriptor'] = descriptor
+            root['kernel_last_snapshot_hist'] = dict(histogram)
+            root['kernel_last_snapshot_anchor'] = anchor_zone
+            for child in children[root_id]:
+                send('kernel', root_id, child, descriptor)
+
+    # Existing descriptors also reach children which joined after generation.
+    for node_id in info:
+        node, _ = _mmzca_node(node_id, veh_table, bus_table)
+        new_children = children[node_id] - node['kernel_known_children']
+        descriptor = node.get('kernel_descriptor')
+        if descriptor is not None:
+            for child in new_children:
+                send('kernel', node_id, child, descriptor)
+        node['kernel_known_children'] = children[node_id].copy()
+
+    return next_messages
+
+
+# ===== MMZCA PHYSICAL LINK AND PARENT SELECTION =====
+
+"""Smaller MMZCA parent-selection additions for the EXISTING utils/util.py.
+
+Append AFTER the MMZCA kernel helpers. In particular, this intentionally
+reuses their _mmzca_node(), _mmzca_is_root(), _mmzca_root_id(), and
+_mmzca_parent_id(), plus your existing det_dist(id, table, id, table).
+
+This file REPLACES the earlier choose_mmzca_parent() addition. Do not append
+both versions. It also exposes mmzca_physical_link() for PCH election.
+"""
+
+import math
+import random
+
+
+def _mmzca_normalized_weights(weights, count, name):
+    values = [float(x) for x in weights]
+    if (len(values) != count or not all(math.isfinite(v) and v >= 0 for v in values)
+            or sum(values) <= 0):
+        raise ValueError(name + ' requires nonnegative finite weights with positive sum')
+    total = sum(values)
+    return [v / total for v in values]
+
+
+def _mmzca_heading(record, zones, zone_level, lon_scale):
+    """Local motion unit vector using the last DISTINCT occupied zone."""
+    previous = record.get('prev_' + zone_level + '_zone')
+    if previous is None or previous == record.get(zone_level + '_zone'):
+        return None
+    cell = zones.zone_hash.values(previous)
+    if cell is None:
+        return None
+    cx = (float(cell['min_long']) + float(cell['max_long'])) / 2
+    cy = (float(cell['min_lat']) + float(cell['max_lat'])) / 2
+    dx = (float(record['long']) - cx) * lon_scale
+    dy = float(record['lat']) - cy
+    length = math.hypot(dx, dy)
+    if length <= 1e-15 or not math.isfinite(length):
+        return None
+    return dx / length, dy / length
+
+
+def _mmzca_angular_difference(a, b, zones, level, lon_scale):
+    av = _mmzca_heading(a, zones, level, lon_scale)
+    bv = _mmzca_heading(b, zones, level, lon_scale)
+    if av is None or bv is None:
+        return math.pi, True
+    similarity = max(-1.0, min(1.0, av[0] * bv[0] + av[1] * bv[1]))
+    return math.acos(similarity), False
+
+
+def mmzca_physical_link(i_id, j_id, i_table, j_table,
+                        meso_zones, macro_zones, config):
+    """Physical L_ij and MZOTD using existing util.det_dist in METERS.
+
+    Return None for a non-feasible reciprocal one-hop physical link.
+    This common helper is usable for both PCH SA-SA evaluation and
+    the CH/CM parent selector; no duplicated haversine/projection distance.
+    """
+    i, j = i_table.values(i_id), j_table.values(j_id)
+    if i is None or j is None:
+        return None
+    try:
+        distance_m = float(det_dist(i_id, i_table, j_id, j_table))
+        radius_m = min(float(i['trans_range']), float(j['trans_range']))
+        if (not math.isfinite(distance_m) or not math.isfinite(radius_m)
+                or radius_m <= 0 or distance_m > radius_m):
+            return None
+
+        v_i, v_j = abs(float(i['speed'])), abs(float(j['speed']))
+        speed = abs(v_i - v_j) / max(v_i, v_j, float(config.v0))
+        if not math.isfinite(speed) or float(config.v0) <= 0:
+            return None
+
+        w = _mmzca_normalized_weights(config.weights_m, 3, 'weights_m')
+        omega = _mmzca_normalized_weights(
+            (config.omega_meso, config.omega_macro), 2, 'MZOTD weights'
+        )
+        latitude = (float(config.area['min_lat']) + float(config.area['max_lat'])) / 2
+        lon_scale = math.cos(math.radians(latitude))
+        theta_m, missing_m = _mmzca_angular_difference(
+            i, j, meso_zones, 'meso', lon_scale
+        )
+        theta_M, missing_M = _mmzca_angular_difference(
+            i, j, macro_zones, 'macro', lon_scale
+        )
+        mzotd = omega[0] * theta_m + omega[1] * theta_M
+        L = w[0] * mzotd / math.pi + w[1] * speed + w[2] * distance_m / radius_m
+        return {
+            'L': L, 'distance_m': distance_m, 'MZOTD_rad': mzotd,
+            'meso_angle_missing': missing_m, 'macro_angle_missing': missing_M,
+            'speed_term': speed,
+        } if math.isfinite(L) else None
+    except (KeyError, TypeError, ValueError, OverflowError, ZeroDivisionError):
+        return None
+
+
+def _mmzca_candidate_chain(j_id, joining_id, veh_table, bus_table, h_max):
+    """Validate parent j's committed root path and reciprocal physical links.
+
+    Returns (root_id, depth_j) or None; excludes paths through joining_id.
+    """
+    j, _ = _mmzca_node(j_id, veh_table, bus_table)
+    if j is None or j.get('root_connection_valid') is False:
+        return None
+    root_id = _mmzca_root_id(j_id, j, veh_table, bus_table)
+    root, _ = _mmzca_node(root_id, veh_table, bus_table)
+    if root is None or not _mmzca_is_root(root_id, veh_table, bus_table):
+        return None
+    root_epoch = root.get('kernel_root_incarnation')
+    if _mmzca_is_root(j_id, veh_table, bus_table):
+        return j_id, 0
+
+    try:
+        depth_j = int(j['hop_count'])
+        if not 1 <= depth_j <= h_max - 1:
+            return None
+    except (ValueError, TypeError, KeyError):
+        return None
+
+    seen = {joining_id}
+    node_id, expected_depth = j_id, depth_j
+    while node_id not in seen:
+        seen.add(node_id)
+        node, node_table = _mmzca_node(node_id, veh_table, bus_table)
+        if node is None or node.get('root_connection_valid') is False:
+            return None
+        if _mmzca_root_id(node_id, node, veh_table, bus_table) != root_id:
+            return None
+        node_epoch = node.get('kernel_root_incarnation')
+        if (root_epoch is not None and node_epoch is not None
+                and root_epoch != node_epoch):
+            return None
+        if _mmzca_is_root(node_id, veh_table, bus_table):
+            return (root_id, depth_j) if node_id == root_id and expected_depth == 0 else None
+        if node.get('hop_count') != expected_depth or expected_depth <= 0:
+            return None
+
+        parent_id = _mmzca_parent_id(node)
+        parent, parent_table = _mmzca_node(parent_id, veh_table, bus_table)
+        if parent is None or parent_id in seen:
+            return None
+        try:
+            d = det_dist(node_id, node_table, parent_id, parent_table)
+            if d > min(float(node['trans_range']), float(parent['trans_range'])):
+                return None
+        except (KeyError, ValueError, TypeError):
+            return None
+        node_id, expected_depth = parent_id, expected_depth - 1
+    return None
+
+
+def choose_mmzca_parent(veh_id, veh_table, bus_table,
+                        bus_candidates, ch_candidates, sub_ch_candidates,
+                        micro_zones, meso_zones, macro_zones,
+                        config, current_time, return_details=False, rng=None):
+    """Unified direct-CH/CM MMZCA selection, without private distance code.
+
+    Requires the MMZCA kernel utilities in the SAME existing util.py.
+    Numerical affinity: zero for CH, stale or missing kernel; status retained.
+    """
+    if rng is None:
+        rng = random
+    empty = (None, math.inf, {}) if return_details else (None, math.inf)
+    i = veh_table.values(veh_id)
+    if i is None:
+        return empty
+
+    h_max = int(config.h_max)
+    if h_max < 1:
+        raise ValueError('h_max must be >= 1')
+    wG = _mmzca_normalized_weights(config.weights_G, 3, 'weights_G')
+    iota, tol, delta_bus = (float(config.iota), float(config.selection_tolerance),
+                            float(config.delta_bus))
+    if not 0 <= iota <= 1 or tol < 0 or delta_bus < 0:
+        raise ValueError('Invalid iota, selection_tolerance or delta_bus')
+
+    feasible = {}
+    for j in set(bus_candidates) | set(ch_candidates) | set(sub_ch_candidates):
+        if j == veh_id:
+            continue
+        record, table = _mmzca_node(j, veh_table, bus_table)
+        if record is None or record.get('admit_children') is False:
+            continue
+        chain = _mmzca_candidate_chain(j, veh_id, veh_table, bus_table, h_max)
+        if chain is None:
+            continue
+        root_id, depth_j = chain
+        link = mmzca_physical_link(veh_id, j, veh_table, table,
+                                   meso_zones, macro_zones, config)
+        if link is None:
+            continue
+
+        children = record.get('direct_children')
+        capacity = config.max_ch_members if depth_j == 0 else config.max_rn_members
+        if children is not None and len(children) >= int(capacity) and veh_id not in children:
+            continue
+        if depth_j == 0:
+            Q_j = 0.0
+        else:
+            try:
+                Q_j = float(record['path_bottleneck'])
+                if not math.isfinite(Q_j) or not 0 <= Q_j <= 1:
+                    continue
+            except (KeyError, ValueError, TypeError):
+                continue
+
+        Q = max(Q_j, link['L'])
+        depth = depth_j + 1
+        G0 = wG[0] * Q + wG[1] * link['L'] + wG[2] * depth / h_max
+        feasible[j] = dict(link, root_id=root_id, depth=depth,
+                           Q_candidate=Q, G0=G0, is_root_parent=(depth_j == 0),
+                           is_bus_rooted=bus_table.values(root_id) is not None)
+    if not feasible:
+        return empty
+
+    # The most recent eligible sketch is shared among one-hop CMs of one root.
+    kernels_by_root = {}
+    for j, f in feasible.items():
+        kernels_by_root.setdefault(f['root_id'], set()).add(j)
+    affinity_by_root = {}
+    if iota < 1:
+        for root_id, parents in kernels_by_root.items():
+            descriptor = mmzca_latest_root_kernel(
+                root_id, parents, veh_table, bus_table, current_time, config.kernel_ttl
+            )
+            affinity_by_root[root_id] = (
+                mmzca_affinity_from_kernel(
+                    veh_id, root_id, veh_table, micro_zones, descriptor,
+                    descriptor['incarnation'], current_time, config.kernel_ttl
+                ) if descriptor is not None else (0.0, False)
+            )
+
+    for f in feasible.values():
+        if f['is_root_parent']:
+            A, status = 0.0, 'root_ch'
+        elif iota == 1:
+            A, status = 0.0, 'not_used'
+        else:
+            A, known = affinity_by_root[f['root_id']]
+            status = 'valid' if known else 'unavailable'
+        f['A_tilde'], f['kernel_status'] = A, status
+        f['L_aff'] = iota * f['L'] + (1 - iota) * A
+        f['Gaff'] = (wG[0] * f['Q_candidate'] + wG[1] * f['L_aff']
+                     + wG[2] * f['depth'] / h_max)
+        f['Glb'] = (wG[0] * f['Q_candidate'] + wG[1] * iota * f['L']
+                    + wG[2] * f['depth'] / h_max)
+
+    incumbent = _mmzca_parent_id(i)
+
+    def best(ids, key):
+        cost = min(feasible[j][key] for j in ids)
+        tied = [j for j in ids if abs(feasible[j][key] - cost) <= tol]
+        minimum_link = min(feasible[j]['L'] for j in tied)
+        tied = [j for j in tied if abs(feasible[j]['L'] - minimum_link) <= tol]
+        min_depth = min(feasible[j]['depth'] for j in tied)
+        tied = [j for j in tied if feasible[j]['depth'] == min_depth]
+        return incumbent if incumbent in tied else rng.choice(tied)
+
+    known = {j for j, f in feasible.items() if f['kernel_status'] != 'unavailable'}
+    unknown = set(feasible) - known
+    if iota == 1 or not known:
+        mode, key, allowed = 'physical', 'G0', set(feasible)
+    elif not unknown:
+        mode, key, allowed = 'affinity', 'Gaff', known
+    else:
+        leader = best(known, 'Gaff')
+        lb = min(feasible[j]['Glb'] for j in unknown)
+        if feasible[leader]['Gaff'] < lb - tol:
+            mode, key, allowed = 'guarded_affinity', 'Gaff', known
+        else:
+            mode, key, allowed = 'physical', 'G0', set(feasible)
+    chosen = best(allowed, key)
+
+    buses = {j for j in allowed if feasible[j]['is_bus_rooted'] and
+             feasible[j][key] <= feasible[chosen][key] + delta_bus + tol}
+    if mode == 'guarded_affinity':
+        lb = min(feasible[j]['Glb'] for j in unknown)
+        buses = {j for j in buses if feasible[j]['Gaff'] < lb - tol}
+    if buses:
+        chosen = best(buses, key)
+
+    if incumbent in allowed and incumbent != chosen:
+        improvement = feasible[incumbent][key] - feasible[chosen][key]
+        if improvement < float(config.parent_hysteresis_delta):
+            chosen = incumbent
+    score = feasible[chosen][key]
+    details = dict(feasible[chosen], selection_mode=mode, all_candidates=feasible)
+    return (chosen, score, details) if return_details else (chosen, score)

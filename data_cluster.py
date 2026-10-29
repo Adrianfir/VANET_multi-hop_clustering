@@ -13,6 +13,8 @@ import folium
 from folium.plugins import MarkerCluster
 import webbrowser
 import sys
+import math
+import random
 
 from graph import Graph
 import utils.util as util
@@ -69,6 +71,17 @@ class DataTable:
         self.tvct_history = []  # stores TVCT(t) at each tick
         self.avg_tvct_history = []  # stores running average up to each tick
         self.tvct_cumulative = 0.0
+        self.tvct_events = []       # event log: includes intra-tick reversals
+        self._tvct_events_this_tick = []
+
+        # MMZCA kernel protocol state. Per-vehicle/CH histograms, descriptors,
+        # and versions live IN self.veh_table / self.bus_table dictionaries.
+        # Only in-flight one-hop messages and persistent CH incarnation numbers
+        # are kept here at the simulation-coordination level.
+        self.kernel_messages = []
+        self.kernel_root_registry = {}
+        self.kernel_stats = {'kernel_messages_sent': 0,
+                             'kernel_control_bytes_est': 0}
 
         for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
                    1::2]:
@@ -128,6 +141,7 @@ class DataTable:
           - legacy primary_ch / secondary_ch compatibility
         """
         self.time += 1
+        self._tvct_events_this_tick = []
         bus_ids = set()
         veh_ids = set()
         self.net_graph.remove_edges_from(self.net_graph.edges())
@@ -163,6 +177,9 @@ class DataTable:
                 self.bus_table.values(veh_id)['root_ch'] = veh_id
                 self.bus_table.values(veh_id)['parent_node'] = None
                 self.bus_table.values(veh_id)['hop_count'] = 0
+                self.bus_table.values(veh_id)['path_bottleneck'] = 0.0
+                self.bus_table.values(veh_id)['committed_link_score'] = None
+                self.bus_table.values(veh_id)['root_connection_valid'] = True
                 self.bus_table.values(veh_id)['current_root_cost'] = 0.0
                 self.bus_table.values(veh_id)['current_parent_cost'] = 0.0
 
@@ -201,25 +218,22 @@ class DataTable:
         # -------- remove buses that left the area --------
         temp_left_buses = self.bus_table.ids() - bus_ids
         for k in temp_left_buses:
-            temp_cluster_members = self.bus_table.values(k)['cluster_members'].copy()
+            # Start with ACTUAL immediate children; remove_member recursively
+            # invalidates every descendant before its ancestor.
+            children = self._mmzca_children()
+            for m in list(children.get(k, ())):
+                before = self._mmzca_subtree_tvct_states(m, children)
+                self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
+                    util.remove_member(
+                        m, k, self.veh_table, self.bus_table, config,
+                        self.stand_alone, self.zone_stand_alone,
+                        ch_stays=False
+                    )
+                self._mmzca_log_tvct_transitions(before, 'bus_departure')
 
-            for m in temp_cluster_members:
-                if m in self.bus_table.values(k)['cluster_members']:
-                    self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                        util.remove_member(
-                            m, k, self.veh_table, self.bus_table, config,
-                            self.stand_alone, self.zone_stand_alone,
-                            ch_stays=False
-                        )
-
-                    if m in self.veh_table.ids():
-                        self.veh_table.values(m)['priority_ch'] = None
-                        self.veh_table.values(m)['priority_counter'] = config.priority_counter
-                        uhelp.reset_cluster_fields(m, self.veh_table, self.bus_table)
-
-            self.zone_buses[self.bus_table.values(k)['macro_zone']].remove(k)
-            self.zone_ch[self.bus_table.values(k)['macro_zone']].remove(k)
-            self.all_chs.remove(k)
+            self.zone_buses[self.bus_table.values(k)['macro_zone']].discard(k)
+            self.zone_ch[self.bus_table.values(k)['macro_zone']].discard(k)
+            self.all_chs.discard(k)
 
             self.bus_table.values(k)['depart_time'] = self.time - 1
             self.left_bus[k] = self.bus_table.values(k)
@@ -231,47 +245,52 @@ class DataTable:
         temp_left_vehs = self.veh_table.ids() - veh_ids
         for k in temp_left_vehs:
             if self.veh_table.values(k)['cluster_head'] is True:
-                temp_cluster_members = self.veh_table.values(k)['cluster_members'].copy()
-
-                for m in temp_cluster_members:
-                    if m in self.veh_table.values(k)['cluster_members']:
-                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                            util.remove_member(
-                                m, k, self.veh_table, self.bus_table, config,
-                                self.stand_alone, self.zone_stand_alone,
-                                ch_stays=False
-                            )
-                        if m in self.veh_table.ids():
-                            uhelp.reset_cluster_fields(m, self.veh_table, self.bus_table)
-
-                self.zone_ch[self.veh_table.values(k)['macro_zone']].remove(k)
-                self.all_chs.remove(k)
-
-            elif self.veh_table.values(k)['primary_ch'] is not None:
-                k_root = self.veh_table.values(k)['primary_ch']
-                k_parent = self.veh_table.values(k)['secondary_ch']
-
-                if k_parent is not None:
-                    self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                        util.remove_sub_member(
-                            k, k_parent, k_root,
-                            self.veh_table, self.bus_table, config,
-                            self.stand_alone, self.zone_stand_alone,
-                            sub_mem_stays=False
-                        )
-                else:
+                children = self._mmzca_children()
+                for m in list(children.get(k, ())):
+                    before = self._mmzca_subtree_tvct_states(m, children)
                     self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
                         util.remove_member(
-                            k, k_root, self.veh_table, self.bus_table, config,
+                            m, k, self.veh_table, self.bus_table, config,
                             self.stand_alone, self.zone_stand_alone,
-                            mem_stays=False
+                            ch_stays=False
                         )
+                    self._mmzca_log_tvct_transitions(before, 'vehicle_ch_departure')
+
+                self.zone_ch[self.veh_table.values(k)['macro_zone']].discard(k)
+                self.all_chs.discard(k)
+
+            elif self._mmzca_parent(k) is not None:
+                # A departing CM may itself have arbitrary-depth descendants.
+                # The corrected util.remove_* methods detach its whole branch.
+                before = self._mmzca_subtree_tvct_states(k)
+                k_root = self._mmzca_root(k)
+                k_parent = self._mmzca_parent(k)
+
+                if k_parent is not None and k_root is not None:
+                    if k_parent == k_root:
+                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
+                            util.remove_member(
+                                k, k_root, self.veh_table, self.bus_table, config,
+                                self.stand_alone, self.zone_stand_alone,
+                                mem_stays=False
+                            )
+                    else:
+                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
+                            util.remove_sub_member(
+                                k, k_parent, k_root,
+                                self.veh_table, self.bus_table, config,
+                                self.stand_alone, self.zone_stand_alone,
+                                sub_mem_stays=False
+                            )
+                self._mmzca_log_tvct_transitions(before, 'cm_departure')
 
             elif k in self.stand_alone:
-                self.stand_alone.remove(k)
-                self.zone_stand_alone[self.veh_table.values(k)['macro_zone']].remove(k)
+                self.stand_alone.discard(k)
+                self.zone_stand_alone[self.veh_table.values(k)['macro_zone']].discard(k)
 
-            self.zone_vehicles[self.veh_table.values(k)['macro_zone']].remove(k)
+            self.stand_alone.discard(k)
+            self.zone_stand_alone[self.veh_table.values(k)['macro_zone']].discard(k)
+            self.zone_vehicles[self.veh_table.values(k)['macro_zone']].discard(k)
             self.veh_table.values(k)['depart_time'] = self.time - 1
             self.left_veh[k] = self.veh_table.values(k)
 
@@ -282,130 +301,348 @@ class DataTable:
         for veh_id in self.veh_table.ids():
             uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
 
-    def update_cluster(self, veh_ids, config):
-        """
-        New MMZCA update logic:
-          - maintain clustered nodes if feasible
-          - recover previous root during priority window
-          - unresolved SAs try root-first, parent-second joining
-          - do not self-elect CH here immediately; leave that to stand_alones_cluster
-        """
-        # ---- pass 1: clear per-tick local info and sync fields
-        for veh_id in self.veh_table.ids():
-            self.veh_table.values(veh_id)['other_chs'] = set()
-            self.veh_table.values(veh_id)['gates'] = dict()
-            self.veh_table.values(veh_id)['gate_chs'] = set()
-            self.veh_table.values(veh_id)['other_vehs'] = set()
-            uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
+    def _mmzca_is_sa(self, veh_id):
+        st = self.veh_table.values(veh_id)
+        return (st is not None and st.get('cluster_head') is not True
+                and st.get('primary_ch') is None and st.get('parent_node') is None
+                and st.get('in_area', True) is not False)
 
-        # ---- pass 2: maintain CHs and currently attached vehicles
-        for veh_id in list(self.veh_table.ids()):
-            st = self.veh_table.values(veh_id)
+    def _mmzca_record(self, node_id):
+        return self.veh_table.values(node_id) or self.bus_table.values(node_id)
 
-            # ---- CH maintenance
-            if st['cluster_head'] is True:
-                temp_cluster_members = st['cluster_members'].copy()
-                for m in temp_cluster_members:
-                    dist = util.det_dist(veh_id, self.veh_table, m, self.veh_table)
-                    if dist > min(st['trans_range'], self.veh_table.values(m)['trans_range']):
-                        if m in st['cluster_members']:
-                            self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                                util.remove_member(
-                                    m, veh_id, self.veh_table, self.bus_table, config,
-                                    self.stand_alone, self.zone_stand_alone
-                                )
+    def _mmzca_parent(self, node_id):
+        st = self._mmzca_record(node_id)
+        if st is None:
+            return None
+        return (st.get('parent_node') or st.get('parent_id') or
+                st.get('secondary_ch') or st.get('primary_ch'))
 
-                # CH with no members becomes SA after macro-zone change
-                if (len(st['cluster_members']) == 0 and
-                        (st['start_ch_zone'] != st['macro_zone']) and
-                        (st['prev_macro_zone'] != st['macro_zone'])):
-                    self.veh_table, self.zone_ch, self.all_chs, self.stand_alone, self.zone_stand_alone = \
-                        util.set_ch_to_veh(
-                            veh_id, self.veh_table, self.zone_ch,
-                            self.all_chs, self.stand_alone, self.zone_stand_alone
-                        )
-                    # uhelp.reset_cluster_fields(veh_id, self.veh_table, self.bus_table)
-                    # uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
-                # else:
-                #     self.zone_ch[self.veh_table.values(veh_id)['macro_zone']].add(veh_id)
-                    # self.all_chs.add(veh_id)
+    def _mmzca_root(self, node_id):
+        st = self._mmzca_record(node_id)
+        if st is None:
+            return None
+        if node_id in self.bus_table.ids() or st.get('cluster_head') is True:
+            return node_id
+        return st.get('root_ch') or st.get('primary_ch')
+
+    def _mmzca_children(self):
+        """Use immediate parent pointers, never root cluster_members, for edges."""
+        children = {node_id: set() for node_id in self.veh_table.ids() | self.bus_table.ids()}
+        for node_id in self.veh_table.ids():
+            parent_id = self._mmzca_parent(node_id)
+            if parent_id in children and parent_id != node_id and not self._mmzca_is_sa(node_id):
+                children[parent_id].add(node_id)
+        return children
+
+    def _mmzca_subtree_tvct_states(self, root_id, children=None):
+        """Snapshot active vehicle states in a descendant subtree."""
+        if children is None:
+            children = self._mmzca_children()
+        states, seen, stack = {}, set(), [root_id]
+        while stack:
+            node_id = stack.pop()
+            if node_id in seen:
                 continue
+            seen.add(node_id)
+            if node_id in self.veh_table.ids():
+                states[node_id] = self._tvct_state(node_id)
+            stack.extend(children.get(node_id, ()))
+        return states
 
-            # ---- attached vehicle maintenance
-            if st['primary_ch'] is not None:
-                parent_id = uhelp.get_parent(veh_id, self.veh_table, self.bus_table)
-                root_id = uhelp.get_root(veh_id, self.veh_table, self.bus_table)
+    def _mmzca_log_tvct_transitions(self, previous_states, reason):
+        """Record meaningful changes immediately, including reversals in a tick."""
+        for node_id, before in previous_states.items():
+            after = self._tvct_state(node_id)
+            if before is not None and after is not None and before != after:
+                event = dict(time=self.time, vehicle=node_id, before=before,
+                             after=after, reason=reason)
+                self._tvct_events_this_tick.append(event)
+                self.tvct_events.append(event)
 
-                # if parent_id is None or root_id is None:
-                #     self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                #         uhelp.detach_from_current_cluster(
-                #             veh_id, self.veh_table, self.bus_table, config,
-                #             self.stand_alone, self.zone_stand_alone
-                #         )
-                #     continue
+    def _mmzca_sync_direct_children(self):
+        children = self._mmzca_children()
+        for node_id, child_ids in children.items():
+            self._mmzca_record(node_id)['direct_children'] = child_ids
+        return children
 
-                still_feasible = uhelp.feasible_parent_for_root(
-                    veh_id, parent_id, root_id,
-                    self.veh_table, self.bus_table,
-                    self.micro_zones, self.meso_zones, self.macro_zones,
-                    config
+    def _mmzca_valid_committed_path(self, node_id, config):
+        """Check exactly the committed parent chain and each physical edge."""
+        root_id = self._mmzca_root(node_id)
+        if root_id is None:
+            return False
+        root = self._mmzca_record(root_id)
+        if root is None or (root_id not in self.bus_table.ids()
+                            and root.get('cluster_head') is not True):
+            return False
+        epoch = root.get('kernel_root_incarnation')
+        seen = set()
+        current = node_id
+        expected = None
+        while current not in seen:
+            seen.add(current)
+            node = self._mmzca_record(current)
+            if node is None or node.get('root_connection_valid') is False:
+                return False
+            if self._mmzca_root(current) != root_id:
+                return False
+            node_epoch = node.get('kernel_root_incarnation')
+            if epoch is not None and node_epoch is not None and epoch != node_epoch:
+                return False
+            try:
+                depth = int(node['hop_count'])
+            except (KeyError, ValueError, TypeError):
+                return False
+            if depth < 0 or depth > int(config.h_max):
+                return False
+            if expected is not None and depth != expected:
+                return False
+            if current == root_id:
+                return depth == 0
+            if depth == 0:
+                return False
+            parent_id = self._mmzca_parent(current)
+            parent = self._mmzca_record(parent_id)
+            if parent is None:
+                return False
+            try:
+                dist = util.det_dist(
+                    current, self.bus_table if current in self.bus_table.ids() else self.veh_table,
+                    parent_id, self.bus_table if parent_id in self.bus_table.ids() else self.veh_table
                 )
+                bound = min(float(node['trans_range']), float(parent['trans_range']))
+                if not math.isfinite(dist) or dist > bound:
+                    return False
+            except (KeyError, TypeError, ValueError):
+                return False
+            expected = depth - 1
+            current = parent_id
+        return False
 
-                if still_feasible:
-                    # refresh timer as before
-                    rec = self.veh_table.values(veh_id)['cluster_record'].tail.value
-                    if rec['start_time'] is not None and rec['start_time'] + rec['timer'] - 1 != self.time:
-                        rec['timer'] += 1
-                    continue
-                else:
-                    if parent_id == root_id:
-                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                            util.remove_member(
-                                veh_id, root_id, self.veh_table, self.bus_table, config,
-                                self.stand_alone, self.zone_stand_alone
-                            )
-                    else:
-                        self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                            util.remove_sub_member(
-                                veh_id, parent_id, root_id, self.veh_table, self.bus_table, config,
-                                self.stand_alone, self.zone_stand_alone
-                            )
+    def _mmzca_detach_branch(self, veh_id, config):
+        """Invalidate an entire dependent branch, removing leaves first.
 
-                    # self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
-                    #     uhelp.detach_from_current_cluster(
-                    #         veh_id, self.veh_table, self.bus_table, config,
-                    #         self.stand_alone, self.zone_stand_alone
-                    #     )
-                    # after detaching, it becomes SA with previous-root priority preserved by legacy fields
-                    continue
+        This is the safe fallback when an atomic subtree-move API is absent.
+        """
+        children = self._mmzca_children()
+        before = self._mmzca_subtree_tvct_states(veh_id, children)
+        branch = []
+        seen = set()
 
-        # ---- pass 3: unresolved stand-alone joining logic
-        temp_stand_alone = list(self.stand_alone.copy())
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
+        def collect(node_id):
+            if node_id in seen:
+                return
+            seen.add(node_id)
+            for child_id in children.get(node_id, ()):
+                collect(child_id)
+            branch.append(node_id)
+
+        collect(veh_id)
+        for node_id in branch:
+            st = self.veh_table.values(node_id)
+            if st is None or self._mmzca_is_sa(node_id):
                 continue
+            parent_id = self._mmzca_parent(node_id)
+            root_id = self._mmzca_root(node_id)
+            if parent_id is None or root_id is None:
+                raise RuntimeError('Cannot detach inconsistent MMZCA member ' + str(node_id))
+            if parent_id == root_id:
+                self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
+                    util.remove_member(node_id, root_id, self.veh_table, self.bus_table,
+                                       config, self.stand_alone, self.zone_stand_alone)
+            else:
+                self.veh_table, self.bus_table, self.stand_alone, self.zone_stand_alone = \
+                    util.remove_sub_member(node_id, parent_id, root_id,
+                                           self.veh_table, self.bus_table, config,
+                                           self.stand_alone, self.zone_stand_alone)
+            st = self.veh_table.values(node_id)
+            if st is None:
+                continue
+            uhelp.reset_cluster_fields(node_id, self.veh_table, self.bus_table)
+            st['root_ch'] = None
+            st['parent_node'] = None
+            st['hop_count'] = None
+            st['path_bottleneck'] = None
+            st['committed_link_score'] = None
+            st['root_connection_valid'] = False
+            st['direct_children'] = set()
+            st['kernel_descriptor'] = None
+            st['priority_ch'] = root_id
+            st['priority_counter'] = int(config.priority_counter)
+            st['counter'] = max(1, int(st.get('counter') or 0))
+            self.stand_alone.add(node_id)
+            self.zone_stand_alone[st['macro_zone']].add(node_id)
+        self._mmzca_log_tvct_transitions(before, 'parent_link_failure')
 
+    def _mmzca_join_sa(self, veh_id, config):
+        """One selection/attachment path for both CH and CM parent candidates."""
+        if not self._mmzca_is_sa(veh_id):
+            return False
+        before = self._tvct_state(veh_id)
+        bus_candidates, ch_candidates, cm_candidates, other_vehs = util.det_near_ch(
+            veh_id, self.veh_table, self.bus_table,
+            self.zone_buses, self.zone_vehicles
+        )
+        bus_candidates = set(bus_candidates)
+        ch_candidates = set(ch_candidates)
+        cm_candidates = set(cm_candidates)
+        st = self.veh_table.values(veh_id)
+
+        # Same-root backup gets first opportunity during the bounded priority
+        # window; infeasibility immediately opens the other-root fallback.
+        options = []
+        prior_root = st.get('priority_ch')
+        if prior_root is not None and st.get('priority_counter', 0) > 0:
+            preferred = tuple(
+                {j for j in group if self._mmzca_root(j) == prior_root}
+                for group in (bus_candidates, ch_candidates, cm_candidates)
+            )
+            if any(preferred):
+                options.append(preferred)
+        options.append((bus_candidates, ch_candidates, cm_candidates))
+
+        for initial_groups in options:
+            remaining = [set(group) for group in initial_groups]
+            while any(remaining):
+                parent_id, score, detail = util.choose_mmzca_parent(
+                    veh_id, self.veh_table, self.bus_table,
+                    remaining[0], remaining[1], remaining[2],
+                    self.micro_zones, self.meso_zones, self.macro_zones,
+                    config, self.time, return_details=True
+                )
+                if parent_id is None:
+                    break
+                root_id = detail['root_id']
+                parent = self._mmzca_record(parent_id)
+                root = self._mmzca_record(root_id)
+                # Recheck immediate eligibility just before commitment.
+                feasible = (parent is not None and root is not None
+                            and self._mmzca_valid_committed_path(parent_id, config)
+                            and parent.get('admit_children') is not False
+                            and detail['depth'] <= int(config.h_max))
+                if feasible:
+                    self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = \
+                        uhelp.attach_to_parent(
+                            root_id, parent_id, veh_id,
+                            self.veh_table, self.bus_table, config, self.time,
+                            bus_candidates, ch_candidates,
+                            self.stand_alone, self.zone_stand_alone, other_vehs,
+                            root_cost_value=score if parent_id == root_id else None,
+                            parent_cost_value=score
+                        )
+                    st = self.veh_table.values(veh_id)
+                    if (st is None or st.get('primary_ch') != root_id
+                            or (parent_id != root_id and st.get('secondary_ch') != parent_id)):
+                        raise RuntimeError(
+                            'attach_to_parent must commit the selected root and immediate parent; '
+                            'check utils/util_helper.py for arbitrary MMZCA hop support'
+                        )
+                    # Authoritative generalized hierarchy, in the same records.
+                    st['root_ch'] = root_id
+                    st['parent_node'] = parent_id
+                    st['hop_count'] = detail['depth']
+                    st['path_bottleneck'] = detail['Q_candidate']
+                    st['committed_link_score'] = detail['L']
+                    st['root_connection_valid'] = True
+                    st['kernel_root_incarnation'] = root.get('kernel_root_incarnation')
+                    st['current_parent_cost'] = score
+                    st['priority_ch'] = None
+                    st['priority_counter'] = int(config.priority_counter)
+                    self._mmzca_record(parent_id).setdefault('direct_children', set()).add(veh_id)
+                    self.stand_alone.discard(veh_id)
+                    self.zone_stand_alone[st['macro_zone']].discard(veh_id)
+                    self._mmzca_log_tvct_transitions(
+                        {veh_id: before}, 'join_parent'
+                    )
+                    return True
+
+                for group in remaining:
+                    group.discard(parent_id)
+        return False
+
+    def update_cluster(self, veh_ids, config):
+        """Maintain root-connected MMZCA trees; then join unresolved SAs.
+
+        Every CH/CM edge is evaluated against its IMMEDIATE parent, not the
+        root CH. A broken branch is invalidated bottom-up; prior-root repair
+        gets preference without bypassing feasibility or the selection guard.
+        CH election happens only in stand_alones_cluster().
+        """
+        for veh_id in self.veh_table.ids():
             st = self.veh_table.values(veh_id)
-
-            # if st['cluster_head'] is True or st['primary_ch'] is not None:
-            #     continue
-            # if st['in_area'] is not True:
-            #     continue
-
             st['other_chs'] = set()
-            st['gates'] = dict()
+            st['gates'] = {}
             st['gate_chs'] = set()
             st['other_vehs'] = set()
+            uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
+            if st.get('cluster_head') is True:
+                st['root_ch'] = veh_id
+                st['parent_node'] = None
+                st['hop_count'] = 0
+                st['path_bottleneck'] = 0.0
+                st['committed_link_score'] = None
+                st['root_connection_valid'] = True
+        for bus_id in self.bus_table.ids():
+            st = self.bus_table.values(bus_id)
+            st['path_bottleneck'] = 0.0
+            st['committed_link_score'] = None
+            st['root_connection_valid'] = True
 
-            bus_candidates, ch_candidates, sub_ch_candidates, other_vehs = util.det_near_ch(
-                veh_id, self.veh_table, self.bus_table,
-                self.zone_buses, self.zone_vehicles
-            )
-
-            if len(sub_ch_candidates) == 0:
-                self.single_hop(veh_id, config, bus_candidates, ch_candidates, other_vehs)
+        # A parent fails before its children; detach the whole dependent branch
+        # so no descendant retains a false root-connected affiliation.
+        members = [k for k in self.veh_table.ids()
+                   if not self._mmzca_is_sa(k)
+                   and self.veh_table.values(k).get('cluster_head') is not True]
+        members.sort(key=lambda k: int(self.veh_table.values(k).get('hop_count') or 0))
+        for veh_id in members:
+            if self._mmzca_is_sa(veh_id):
+                continue
+            if not self._mmzca_valid_committed_path(veh_id, config):
+                self._mmzca_detach_branch(veh_id, config)
+                continue
+            st = self.veh_table.values(veh_id)
+            parent = self._mmzca_record(self._mmzca_parent(veh_id))
+            # Q is the bottleneck of ORIGINAL committed physical link scores.
+            # Missing legacy L cannot be reconstructed as the old EF or G.
+            upstream = parent.get('path_bottleneck') if parent is not None else None
+            committed_link = st.get('committed_link_score')
+            if upstream is not None and committed_link is not None:
+                st['path_bottleneck'] = max(float(upstream), float(committed_link))
             else:
-                self.multi_hop(veh_id, config, bus_candidates, ch_candidates, sub_ch_candidates, other_vehs)
+                # An unverified legacy score must not be advertised as Q_j.
+                st['path_bottleneck'] = None
+            rec = st.get('cluster_record')
+            if rec is not None and rec.tail is not None:
+                last = rec.tail.value
+                if (last.get('start_time') is not None and last.get('timer') is not None
+                        and last['start_time'] + last['timer'] - 1 != self.time):
+                    last['timer'] += 1
+
+        # Empty ordinary CHs can demote after a later macro-zone transition.
+        # Buses remain persistent CHs. This test uses the actual parent graph.
+        children = self._mmzca_sync_direct_children()
+        for ch_id in list(self.veh_table.ids()):
+            st = self.veh_table.values(ch_id)
+            if st.get('cluster_head') is not True or children.get(ch_id):
+                continue
+            if (st.get('start_ch_zone') != st.get('macro_zone')
+                    and st.get('macro_zone_changed_this_tick', False)):
+                before = self._tvct_state(ch_id)
+                self.veh_table, self.zone_ch, self.all_chs, self.stand_alone, self.zone_stand_alone = \
+                    util.set_ch_to_veh(
+                        ch_id, self.veh_table, self.zone_ch,
+                        self.all_chs, self.stand_alone, self.zone_stand_alone
+                    )
+                st = self.veh_table.values(ch_id)
+                st.update(root_ch=None, parent_node=None, hop_count=None,
+                          path_bottleneck=None, committed_link_score=None,
+                          root_connection_valid=False, kernel_descriptor=None)
+                st['direct_children'] = set()
+                st['counter'] = max(1, int(st.get('counter') or 0))
+                self._mmzca_log_tvct_transitions({ch_id: before}, 'ch_demoted')
+
+        self._mmzca_sync_direct_children()
+        for veh_id in list(self.stand_alone):
+            self._mmzca_join_sa(veh_id, config)
 
     def multi_hop(self, veh_id, config, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
@@ -515,6 +752,8 @@ class DataTable:
                             self.stand_alone, self.zone_stand_alone,
                             self.zone_ch, config, its_sa_clustering=False
                         )
+                    if self.veh_table.values(veh_id)['cluster_head'] is True:
+                        util.mmzca_note_ch_promotion(veh_id, self.kernel_root_registry)
             # else:
             #     st['priority_counter'] = config.priority_counter
 
@@ -548,126 +787,116 @@ class DataTable:
 
         uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
 
+    def _mmzca_pch_link_score(self, a_id, b_id, config):
+        """Reuse util's physical score for SA-SA PCH election."""
+        link = util.mmzca_physical_link(
+            a_id, b_id, self.veh_table, self.veh_table,
+            self.meso_zones, self.macro_zones, config
+        )
+        return None if link is None else link['L']
+
     def stand_alones_cluster(self, configs):
+        """Wait lambda, locally elect PCHs, then join the newly formed CHs.
+
+        SA neighbors are prospective CH-election peers, NOT eligible relay
+        parents. Only a confirmed CH or root-connected CM can be a parent.
         """
-        New SA handling:
-          1. build nearby unresolved SA sets
-          2. choose better PCH/anchor instead of pure neighbor count
-          3. remaining SAs try anchor-assisted joining
-          4. only unresolved and expired-counter SAs become CH
-        """
+        active_sa = {j for j in self.stand_alone if self._mmzca_is_sa(j)}
+        if not active_sa:
+            return
+
+        # One countdown per simulation tick. `counter` is the existing lambda
+        # waiting variable; no independent decrement occurs in update_cluster.
+        eligible = set()
+        for veh_id in active_sa:
+            st = self.veh_table.values(veh_id)
+            st['counter'] = max(0, int(st.get('counter') or 0) - 1)
+            if st.get('priority_ch') is not None:
+                st['priority_counter'] = max(0, int(st.get('priority_counter') or 0) - 1)
+                if st['priority_counter'] == 0:
+                    st['priority_ch'] = None
+                    st['priority_counter'] = int(configs.priority_counter)
+            if st['counter'] == 0:
+                eligible.add(veh_id)
+
+        # Form a symmetric, reciprocal-range one-hop SA neighborhood. Zone
+        # discovery is only a spatial index; it is not a viability gate.
         near_sa = {}
-        pch_choice = {}
-        processed = set()
+        for veh_id in active_sa:
+            discovered = set(util.det_near_sa(
+                veh_id, self.veh_table, self.stand_alone, self.zone_stand_alone
+            ))
+            near_sa[veh_id] = set()
+            for other in discovered & active_sa - {veh_id}:
+                if self._mmzca_pch_link_score(veh_id, other, configs) is not None:
+                    near_sa[veh_id].add(other)
+        # Reciprocal discovery avoids asymmetric elections if indexes lag.
+        for veh_id in active_sa:
+            near_sa[veh_id] = {j for j in near_sa[veh_id]
+                               if veh_id in near_sa.get(j, ())}
 
-        temp_stand_alone = sorted(list(self.stand_alone), reverse=True)
+        # Paper's PCH order: (-SA degree, average physical link L).
+        # Random numbers implement only the final local-contention tie-break.
+        ranking = {}
+        for veh_id in eligible:
+            neighbors = near_sa[veh_id]
+            avg_link = (sum(self._mmzca_pch_link_score(veh_id, j, configs)
+                            for j in neighbors) / len(neighbors)
+                        if neighbors else 1.0)
+            ranking[veh_id] = (-len(neighbors), avg_link, random.random())
 
-        # Step 1: nearby unresolved SAs
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
+        # One-hop local minima are winners; two winners cannot be one-hop
+        # neighbors. There is no global election over a multi-hop SA component.
+        winners = {
+            veh_id for veh_id in eligible
+            if all(ranking[veh_id] < ranking[j]
+                   for j in near_sa[veh_id] & eligible)
+        }
+
+        for veh_id in winners:
+            if not self._mmzca_is_sa(veh_id):
                 continue
-            near_sa[veh_id] = util.det_near_sa(
-                veh_id, self.veh_table,
-                self.stand_alone, self.zone_stand_alone
-            )
-
-        # Step 2: better PCH / anchor consensus
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
-                continue
-            if len(near_sa.get(veh_id, set())) == 0:
-                continue
-
-            best_anchor, best_score = uhelp.best_pch_for_sa(
-                veh_id, near_sa,
-                self.veh_table,
-                self.micro_zones, self.meso_zones,
-                configs
-            )
-            if best_anchor is not None:
-                pch_choice[veh_id] = best_anchor
-
-        # Step 3: unresolved SAs use anchor-assisted joining
-        for veh_id in temp_stand_alone:
-            if veh_id not in self.veh_table.ids():
-                continue
-            if veh_id in processed:
-                continue
-            if self.veh_table.values(veh_id)['cluster_head'] is True:
-                continue
-            if self.veh_table.values(veh_id)['primary_ch'] is not None:
-                continue
-
-            bus_candidates, ch_candidates, rn_candidates, other_vehs = util.det_near_ch(
-                veh_id, self.veh_table, self.bus_table,
-                self.zone_buses, self.zone_vehicles
-            )
-
-            # add chosen anchor as an RN candidate if it is attached
-            anchor = pch_choice.get(veh_id)
-            if anchor is not None and anchor in self.veh_table.ids():
-                if (self.veh_table.values(anchor)['cluster_head'] is False and
-                        self.veh_table.values(anchor)['primary_ch'] is not None):
-                    rn_candidates.add(anchor)
-
-            root_to_parents = uhelp.feasible_roots_and_parents(
-                veh_id,
-                bus_candidates, ch_candidates, rn_candidates,
-                self.veh_table, self.bus_table,
-                self.micro_zones, self.meso_zones, self.macro_zones,
-                configs
-            )
-
-            if len(root_to_parents) > 0:
-                best_root, best_root_cost = uhelp.choose_best_root(
-                    veh_id, root_to_parents,
-                    self.veh_table, self.bus_table,
-                    self.meso_zones, self.macro_zones,
-                    configs
+            before = self._tvct_state(veh_id)
+            self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch = \
+                util.set_ch(
+                    veh_id, self.veh_table, self.all_chs,
+                    self.stand_alone, self.zone_stand_alone,
+                    self.zone_ch, configs, its_sa_clustering=True
                 )
+            st = self.veh_table.values(veh_id)
+            if st['cluster_head'] is not True:
+                continue
+            epoch = util.mmzca_note_ch_promotion(veh_id, self.kernel_root_registry)
+            st.update(root_ch=veh_id, parent_node=None, hop_count=0,
+                      path_bottleneck=0.0, committed_link_score=None,
+                      root_connection_valid=True, kernel_root_incarnation=epoch,
+                      kernel_descriptor=None, current_root_cost=0.0,
+                      current_parent_cost=0.0, priority_ch=None)
+            st['direct_children'] = set()
+            self._mmzca_log_tvct_transitions({veh_id: before}, 'pch_promotion')
 
-                if best_root is not None:
-                    best_parent, best_parent_cost = uhelp.choose_best_parent_for_root(
-                        veh_id, best_root, root_to_parents[best_root],
-                        self.veh_table, self.bus_table,
-                        self.micro_zones,
-                        configs
-                    )
+        self._mmzca_sync_direct_children()
+        # Remaining SAs can now attach to a promoted root, using the same
+        # MZOTD/velocity/distance/affinity-aware parent-selection function.
+        for veh_id in list(self.stand_alone):
+            self._mmzca_join_sa(veh_id, configs)
 
-                    if best_parent is not None:
-                        self.bus_table, self.veh_table, self.stand_alone, self.zone_stand_alone = \
-                            uhelp.attach_to_parent(
-                                best_root, best_parent, veh_id,
-                                self.veh_table, self.bus_table, configs, self.time,
-                                bus_candidates, ch_candidates,
-                                self.stand_alone, self.zone_stand_alone, other_vehs,
-                                root_cost_value=best_root_cost,
-                                parent_cost_value=best_parent_cost
-                            )
-                        uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
-                        processed.add(veh_id)
-                        continue
-
-            # Step 4: only unresolved and expired-counter SAs become CH
-            if (self.veh_table.values(veh_id)['primary_ch'] is None and
-                    self.veh_table.values(veh_id)['cluster_head'] is False and
-                    self.veh_table.values(veh_id)['counter'] <= 0):
-                self.veh_table, self.all_chs, self.stand_alone, self.zone_stand_alone, self.zone_ch = \
-                    util.set_ch(
-                        veh_id, self.veh_table, self.all_chs,
-                        self.stand_alone, self.zone_stand_alone,
-                        self.zone_ch, configs, its_sa_clustering=True
-                    )
-
-                self.veh_table.values(veh_id)['root_ch'] = veh_id
-                self.veh_table.values(veh_id)['parent_node'] = None
-                self.veh_table.values(veh_id)['hop_count'] = 0
-                self.veh_table.values(veh_id)['current_root_cost'] = 0.0
-                self.veh_table.values(veh_id)['current_parent_cost'] = 0.0
-
-        # Final consistency pass
+        self._mmzca_sync_direct_children()
         for veh_id in self.veh_table.ids():
             uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
+
+    def update_kernels(self, config):
+        """Advance MMZCA sparse micro-zone reports and sketch dissemination.
+
+        Call once per tick AFTER update_cluster() and stand_alones_cluster().
+        The arriving sketch is not made available to a parent until the
+        corresponding one-hop message reaches it at a later tick.
+        """
+        self.kernel_messages = util.mmzca_kernel_tick(
+            self.veh_table, self.bus_table, self.micro_zones, config, self.time,
+            self.kernel_messages, self.kernel_root_registry,
+            stats=self.kernel_stats, distance_fn=util.det_dist
+        )
 
     def update_other_connections(self):
         # finding buses' other_chs
@@ -859,13 +1088,20 @@ class DataTable:
           - Vehicle leaving area / disappearing: count 0
           - New arriving vehicle in same tick: count 0 unless you explicitly want otherwise
         """
-        tvct_t = 0
-
         post_ids = set(self.veh_table.ids())
         pre_ids = set(pre_states.keys())
 
         # only vehicles that existed before and still exist after count for transition comparison
-        common_ids = pre_ids.intersection(post_ids)
+        common_ids = {
+            veh_id for veh_id in pre_ids.intersection(post_ids)
+            if self.veh_table.values(veh_id).get('in_area', False) is True
+        }
+
+        # A node may detach and reattach to the same root during one tick.
+        # The endpoint state would be identical, but a real transition occurred.
+        changed_ids = {
+            event['vehicle'] for event in self._tvct_events_this_tick
+        }.intersection(common_ids)
 
         for veh_id in common_ids:
             pre_state = pre_states[veh_id]
@@ -888,7 +1124,9 @@ class DataTable:
             # ('MEM', same_root) -> ('MEM', same_root) becomes no change.
 
             # all other meaningful cluster-affiliation changes count 1
-            tvct_t += 1
+            changed_ids.add(veh_id)
+
+        tvct_t = len(changed_ids)
 
         self.tvct_history.append(tvct_t)
         self.tvct_cumulative += tvct_t
