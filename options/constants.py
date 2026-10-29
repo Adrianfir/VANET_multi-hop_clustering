@@ -13,7 +13,7 @@ import xml.dom.minidom
 class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
-        data_density = 'smallsize'
+        data_density = 'largesize'
         trace_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
                          joinpath('traffic_data', 'final_data_Richmondhill_' + data_density,
                                   'sumoTrace_no_bus_and_rsu.xml'))
@@ -31,12 +31,12 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = float()
-        alpha_micro = 0.2
-        alpha_meso = 0.4
-        alpha_macro= 0.8
+        alpha_micro = 0.25
+        alpha_meso = 0.5
+        alpha_macro= 1
         veh_trans_range = 300
         bus_trans_range = 300
-        start_time = 1500
+        start_time = 1600
         iter = 200
         counter = 4
         priority_counter = 3

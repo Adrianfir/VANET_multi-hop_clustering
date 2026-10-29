@@ -9,6 +9,7 @@ __all__ = []
 import numpy as np
 import haversine as hs
 import utils.util as util
+from functools import lru_cache
 
 def is_bus(node_id):
     # Match the SUMO ID convention used by DataTable.update().
@@ -132,6 +133,7 @@ def zone_row_col(zone_id, zones_obj):
     col = idx % zones_obj.n_cols
     return row, col
 
+@lru_cache(maxsize=30000)
 def zone_center(zone_id, zones_obj):
     """
     Return center (lat, long) of a zone.

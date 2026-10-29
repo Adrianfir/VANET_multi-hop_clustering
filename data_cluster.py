@@ -15,12 +15,56 @@ import webbrowser
 import sys
 import math
 import random
+from bisect import bisect_left
+from functools import lru_cache
 
 from graph import Graph
 import utils.util as util
 import utils.util_helper as uhelp
 import utils.util_graph as util_graph
 import hash
+import builtins
+
+
+class _IndexedHashTable(hash.HashTable):
+    """Drop-in HashTable with O(1) value lookup and O(active) ids().
+
+    Preserves legacy chained buckets (data_map) and every public method;
+    maintains a parallel index only for entries inserted through set_item().
+    Returning a fresh set from ids() retains the original API semantics.
+    """
+    def __init__(self, size):
+        super().__init__(size)
+        self._active_records = {}
+
+    def hash_index(self, key):
+        # The original sum-of-character-codes hash produces severe collisions
+        # for SUMO IDs such as veh123 and veh321. A spread C-level hash avoids
+        # long chained-list removals without changing lookup semantics.
+        return builtins.hash(str(key)) % len(self.data_map)
+
+    def set_item(self, key, value):
+        result = super().set_item(key, value)
+        # Preserve legacy duplicate-key read semantics: first inserted wins.
+        self._active_records.setdefault(key, value)
+        return result
+
+    def values(self, key):
+        return self._active_records.get(key)
+
+    def ids(self):
+        return set(self._active_records)
+
+    def remove(self, key):
+        result = super().remove(key)
+        # The original chained table permits duplicate keys. After removing
+        # its first occurrence, a subsequent duplicate becomes visible.
+        successor = super().values(key)
+        if successor is None:
+            self._active_records.pop(key, None)
+        else:
+            self._active_records[key] = successor
+        return result
 
 
 class DataTable:
@@ -35,33 +79,33 @@ class DataTable:
         """
 
         self.map = None
-        self.bus_table = hash.HashTable(config.n_cars * 100)
-        self.veh_table = hash.HashTable(config.n_cars * 100)
+        self.bus_table = _IndexedHashTable(config.n_cars * 100)
+        self.veh_table = _IndexedHashTable(config.n_cars * 100)
         self.micro_zones = zones['micro']
         self.meso_zones = zones['meso']
         self.macro_zones = zones['macro']
+        # Existing neighbor-zone enumeration is deterministic per macro-zone;
+        # cache it once per active ZoneID object, without changing the API.
+        original_neighbors = self.macro_zones.neighbor_zones
+        cached_neighbors = lru_cache(maxsize=50000)(
+            lambda zone_id: tuple(original_neighbors(zone_id)))
+        # Return a new list on each call, as in the original ZoneID API.
+        self.macro_zones.neighbor_zones = lambda zone_id: list(cached_neighbors(zone_id))
 
-        self.zone_vehicles = dict(zip(self.macro_zones.zone_hash.ids(),
-                                      [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
-                                      )
-                                  )
-        self.zone_buses = dict(zip(self.macro_zones.zone_hash.ids(),
-                                   [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
-                                   )
-                               )
-        self.zone_ch = dict(zip(self.macro_zones.zone_hash.ids(),
-                                [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
-                                )
-                            )
-        self.zone_stand_alone = dict(zip(self.macro_zones.zone_hash.ids(),
-                                         [set() for j in range(len(self.macro_zones.zone_hash.ids()))]
-                                         )
-                                     )
+        # The original code repeatedly scanned all 2,000 zone hash buckets.
+        zone_ids = self.macro_zones.zone_hash.ids()
+        self.zone_vehicles = {zone_id: set() for zone_id in zone_ids}
+        self.zone_buses = {zone_id: set() for zone_id in zone_ids}
+        self.zone_ch = {zone_id: set() for zone_id in zone_ids}
+        self.zone_stand_alone = {zone_id: set() for zone_id in zone_ids}
         self.stand_alone = set()
         self.all_chs = set()
         self.left_veh = dict()
         self.left_bus = dict()
         self.time = config.start_time
+        self._sumo_timesteps = config.sumo_trace.documentElement.getElementsByTagName('timestep')
+        # Pairwise geographic distances and headings are valid only within one tick.
+        util.mmzca_begin_tick()
         self.understudied_area = self.macro_zones.understudied_area()
         self.init_count = 0  # this counter is just for defining the self.net_graph for the very first time
         self.edge_color = ''
@@ -83,18 +127,18 @@ class DataTable:
         self.kernel_stats = {'kernel_messages_sent': 0,
                              'kernel_control_bytes_est': 0}
 
-        for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[
+        for veh in self._sumo_timesteps[self.time].childNodes[
                    1::2]:
             self.init_count += 1
-            micro_zone_id = self.micro_zones.det_zone(float(veh.getAttribute('y')),
+            micro_zone_id = self._mmzca_fast_zone(self.micro_zones, float(veh.getAttribute('y')),
                                                       # determine the micro_zone_id of the car (bus | veh)
                                                       float(veh.getAttribute('x'))
                                                       )
-            meso_zone_id = self.meso_zones.det_zone(float(veh.getAttribute('y')),
+            meso_zone_id = self._mmzca_fast_zone(self.meso_zones, float(veh.getAttribute('y')),
                                                       # determine the meso_zone_id of the car (bus | veh)
                                                       float(veh.getAttribute('x'))
                                                       )
-            macro_zone_id = self.macro_zones.det_zone(float(veh.getAttribute('y')),  # determine the macro_zone_id of the car (bus | veh)
+            macro_zone_id = self._mmzca_fast_zone(self.macro_zones, float(veh.getAttribute('y')),  # determine the macro_zone_id of the car (bus | veh)
                                      float(veh.getAttribute('x'))
                                      )
             # the bus_table will be initiated here for the very first time
@@ -135,6 +179,24 @@ class DataTable:
         # start as SAs, so this makes their presence denominator exact.
         self.record_mmzca_stability()
 
+    @staticmethod
+    def _mmzca_fast_zone(zones, lat, lon):
+        """O(log rows + log cols) zone lookup for the existing regular grid.
+
+        For boundary/outside cases use the original routine to retain its
+        exact tie-breaking semantics. Does not alter ZoneID or zone IDs.
+        """
+        rows, cols = zones.lat_rows, zones.long_cols
+        if lat <= rows[0] or lat >= rows[-1] or lon <= cols[0] or lon >= cols[-1]:
+            return zones.det_zone(lat, lon)
+        r = bisect_left(rows, lat) - 1
+        c = bisect_left(cols, lon) - 1
+        if (r < 0 or c < 0 or r >= zones.n_rows or c >= zones.n_cols
+                or lat == rows[r] or lat == rows[r+1]
+                or lon == cols[c] or lon == cols[c+1]):
+            return zones.det_zone(lat, lon)
+        return zones.zoning_mode + '_zone' + str(r * zones.n_cols + c)
+
     def update(self, config):
         """
         Update bus_table and veh_table for the next timestep.
@@ -145,22 +207,31 @@ class DataTable:
           - legacy primary_ch / secondary_ch compatibility
         """
         self.time += 1
+        begin_tick = getattr(util, 'mmzca_begin_tick', None)
+        if begin_tick is not None:
+            begin_tick()
         self._tvct_events_this_tick = []
+        zone_lookup = getattr(self, '_mmzca_fast_zone', None)
+        if zone_lookup is None:  # compatibility with isolated regression harnesses
+            zone_lookup = lambda z, y, x: z.det_zone(y, x)
+        timesteps = getattr(self, '_sumo_timesteps', None)
+        if timesteps is None:
+            timesteps = config.sumo_trace.documentElement.getElementsByTagName('timestep')
         bus_ids = set()
         veh_ids = set()
         self.net_graph.remove_edges_from(self.net_graph.edges())
 
         # -------- update all active nodes from SUMO --------
-        for veh in config.sumo_trace.documentElement.getElementsByTagName('timestep')[self.time].childNodes[1::2]:
-            micro_zone_id = self.micro_zones.det_zone(
+        for veh in timesteps[self.time].childNodes[1::2]:
+            micro_zone_id = zone_lookup(self.micro_zones,
                 float(veh.getAttribute('y')),
                 float(veh.getAttribute('x'))
             )
-            meso_zone_id = self.meso_zones.det_zone(
+            meso_zone_id = zone_lookup(self.meso_zones,
                 float(veh.getAttribute('y')),
                 float(veh.getAttribute('x'))
             )
-            macro_zone_id = self.macro_zones.det_zone(
+            macro_zone_id = zone_lookup(self.macro_zones,
                 float(veh.getAttribute('y')),
                 float(veh.getAttribute('x'))
             )
@@ -325,7 +396,7 @@ class DataTable:
         st = self._mmzca_record(node_id)
         if st is None:
             return None
-        if node_id in self.bus_table.ids() or st.get('cluster_head') is True:
+        if self.bus_table.values(node_id) is not None or st.get('cluster_head') is True:
             return node_id
         return st.get('root_ch') or st.get('primary_ch')
 
@@ -410,7 +481,7 @@ class DataTable:
         if root_id is None:
             return False
         root = self._mmzca_record(root_id)
-        if root is None or (root_id not in self.bus_table.ids()
+        if root is None or (self.bus_table.values(root_id) is None
                             and root.get('cluster_head') is not True):
             return False
         epoch = root.get('kernel_root_incarnation')
@@ -445,8 +516,8 @@ class DataTable:
                 return False
             try:
                 dist = util.det_dist(
-                    current, self.bus_table if current in self.bus_table.ids() else self.veh_table,
-                    parent_id, self.bus_table if parent_id in self.bus_table.ids() else self.veh_table
+                    current, self.bus_table if self.bus_table.values(current) is not None else self.veh_table,
+                    parent_id, self.bus_table if self.bus_table.values(parent_id) is not None else self.veh_table
                 )
                 bound = min(float(node['trans_range']), float(parent['trans_range']))
                 if not math.isfinite(dist) or dist > bound:
@@ -643,7 +714,7 @@ class DataTable:
                 bus_candidates, ch_candidates = set(bus_candidates), set(ch_candidates)
                 cm_candidates = set(cm_candidates)
                 # Ensure the incumbent is present for a fresh, comparable score.
-                if current_parent in self.bus_table.ids():
+                if self.bus_table.values(current_parent) is not None:
                     bus_candidates.add(current_parent)
                 elif current_parent == root_id:
                     ch_candidates.add(current_parent)

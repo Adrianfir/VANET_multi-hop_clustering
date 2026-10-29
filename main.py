@@ -7,6 +7,7 @@ This project is related to multi-hop clustering in VANET
 __author__: str = "Pouya 'Adrian' Firouzmakan"
 
 import time
+import os
 from data_cluster import DataTable
 from configs.config import Configs
 from zonex import ZoneID
@@ -32,19 +33,40 @@ if __name__ == "__main__":
     n_chs = list()
     n_savs = list()
     start_time = time.time()
+    collect_timings = os.environ.get('MMZCA_TIMINGS') == '1'
+    phase_times = {key: 0.0 for key in (
+        'mobility_and_departures', 'cluster_update', 'pch_election',
+        'kernel_exchange', 'stability_and_tvct')}
+    # Printing each tick can become surprisingly costly in IDE terminals.
+    report_every = max(1, int(getattr(configs, 'progress_every', 25)))
     for i in range(configs.iter):
         # Capture the previous committed state BEFORE departures and updates.
         # New arrivals/departures are excluded by update_tvct's common-ID rule.
         pre_states = cluster._snapshot_tvct_states()
+        t0 = time.perf_counter() if collect_timings else 0.0
         cluster.update(configs)
-        print(cluster.time)
+        if collect_timings:
+            phase_times['mobility_and_departures'] += time.perf_counter() - t0
+            t0 = time.perf_counter()
+        if (i + 1) % report_every == 0 or i + 1 == configs.iter:
+            print(f"MMZCA tick {i + 1}/{configs.iter} (SUMO {cluster.time})")
 
         cluster.update_cluster(cluster.veh_table.ids(), configs)
+        if collect_timings:
+            phase_times['cluster_update'] += time.perf_counter() - t0
+            t0 = time.perf_counter()
         cluster.stand_alones_cluster(configs)
+        if collect_timings:
+            phase_times['pch_election'] += time.perf_counter() - t0
+            t0 = time.perf_counter()
         cluster.update_kernels(configs)
+        if collect_timings:
+            phase_times['kernel_exchange'] += time.perf_counter() - t0
+            t0 = time.perf_counter()
         cluster.record_mmzca_stability()
-
         tvct_t, avg_tvct_t = cluster.update_tvct(pre_states)
+        if collect_timings:
+            phase_times['stability_and_tvct'] += time.perf_counter() - t0
         # cluster.update_other_connections()
         # cluster.form_net_graph()
         # connection_evaluation = cluster.connected_components()
@@ -55,6 +77,11 @@ if __name__ == "__main__":
         # cluster.save_map_img(1, '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/Graph' + str(i))
     #
     end_time = time.time()
+    if collect_timings:
+        print('\nMMZCA per-stage timings (seconds):')
+        for phase, seconds in phase_times.items():
+            print(f'  {phase}: {seconds:.3f}')
+        print(f'  wall_clock_total: {end_time - start_time:.3f}')
     # util.make_slideshow('/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/',
     #                     '/Users/pouyafirouzmakan/Desktop/slideshow/saved_imgs/slide.mp4', configs.fps)
     # cluster.print_table()

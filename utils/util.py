@@ -30,6 +30,25 @@ from selenium.webdriver.firefox.service import Service
 import os
 import cv2
 import re
+from functools import lru_cache
+
+
+
+# These caches are deliberately tick-local. SUMO positions and zone motion
+# change at every timestep; DataTable calls mmzca_begin_tick before updates.
+_MMZCA_DISTANCE_CACHE = None
+_MMZCA_HEADING_CACHE = None
+
+
+def mmzca_begin_tick():
+    global _MMZCA_DISTANCE_CACHE, _MMZCA_HEADING_CACHE
+    _MMZCA_DISTANCE_CACHE = {}
+    _MMZCA_HEADING_CACHE = {}
+
+
+@lru_cache(maxsize=50000)
+def _mmzca_neighbor_zones_cached(zones, zone_id):
+    return tuple(zones.neighbor_zones(zone_id))
 
 
 def initiate_new_bus(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, config, understudied_area):
@@ -636,46 +655,35 @@ def presence(area_cord, veh_cord):
         return False
 
 
-def det_near_ch(veh_id, veh_table, bus_table,
-                zone_buses, zone_vehicles):
-    """
-    This function will determine the buses and chs nearby veh_id
-    :param veh_table:
-    :param bus_table:
-    :param zone_buses:
-    :param zone_vehicles:
-    :param veh_id:
-    :return: it returns bus_candidate which includes buses and vehicles being ch which are in neighbor zones
-    """
-    bus_candidates = set()
-    ch_candidates = set()
-    sub_ch_candidates = set()
-    other_vehs = set()
-    neigh_bus = []
-    neigh_veh = []
-    for neigh_z in veh_table.values(veh_id)['neighbor_zones']:
-        neigh_bus += zone_buses[neigh_z]  # adding all the buses in the neighbor zones to a list
-        neigh_veh += zone_vehicles[neigh_z]
-    for j in neigh_bus:
-        euclidian_dist = det_dist(veh_id, veh_table, j, bus_table)
-        if euclidian_dist <= min(veh_table.values(veh_id)['trans_range'],
-                                 bus_table.values(j)['trans_range']):
+def det_near_ch(veh_id, veh_table, bus_table, zone_buses, zone_vehicles):
+    """Existing reciprocal-range neighbor search, deduplicated and indexed."""
+    src = veh_table.values(veh_id)
+    if src is None:
+        return set(), set(), set(), set()
+    src_range = src['trans_range']
+    buses, vehicles = set(), set()
+    for zone in src['neighbor_zones']:
+        buses.update(zone_buses[zone])
+        vehicles.update(zone_vehicles[zone])
+    bus_candidates, ch_candidates, cm_candidates, other_vehs = set(), set(), set(), set()
+    for j in buses:
+        dst = bus_table.values(j)
+        if dst is not None and det_dist(veh_id, veh_table, j, bus_table) <= min(src_range, dst['trans_range']):
             bus_candidates.add(j)
-
-    for j in neigh_veh:
-        euclidian_dist = det_dist(veh_id, veh_table, j, veh_table)
-
-        if euclidian_dist <= min(veh_table.values(veh_id)['trans_range'],
-                                 veh_table.values(j)['trans_range']):
-            if veh_table.values(j)['cluster_head'] is True:
-                ch_candidates.add(j)
-            elif veh_table.values(j)['primary_ch'] is not None:
-                sub_ch_candidates.add(j)
-                other_vehs.add(j)
-            elif veh_table.values(j)['primary_ch'] is None:
-                other_vehs.add(j)
-
-    return bus_candidates, ch_candidates, sub_ch_candidates, other_vehs
+    for j in vehicles:
+        dst = veh_table.values(j)
+        if dst is None:
+            continue
+        if det_dist(veh_id, veh_table, j, veh_table) > min(src_range, dst['trans_range']):
+            continue
+        if dst['cluster_head'] is True:
+            ch_candidates.add(j)
+        elif dst['primary_ch'] is not None:
+            cm_candidates.add(j)
+            other_vehs.add(j)
+        else:
+            other_vehs.add(j)
+    return bus_candidates, ch_candidates, cm_candidates, other_vehs
 
 
 def det_buses_other_ch(bus_id, veh_table, bus_table,
@@ -1071,29 +1079,21 @@ def update_veh_table(veh, veh_table, micro_zone_id, meso_zone_id, macro_zone_id,
     return veh_table, zone_vehicles, zone_ch, stand_alone, zone_stand_alone
 
 
-def det_near_sa(veh_id, veh_table,
-                stand_alone, zone_stand_alone):
-    """
-    This function would determine the nearby stand_alone vehicles to veh_id
-    :param veh_id: the stand-alone vehicle that we want to find the other stand-alones to it
-    :param veh_table: vehicle_table in the data_cluster.py
-    :param stand_alone: self.stand_alone in the data_cluster.py
-    :param zone_stand_alone: self.zone_stand_alone in the data_cluster.py
-    :return: nearby stand-alone vehicles to veh_id
-    """
+def det_near_sa(veh_id, veh_table, stand_alone, zone_stand_alone):
+    """Return feasible SA neighbors once each, preserving reciprocal-range rule."""
+    src = veh_table.values(veh_id)
+    if src is None:
+        return set()
+    others = set()
+    for zone in src['neighbor_zones']:
+        others.update(zone_stand_alone[zone])
+    others.discard(veh_id)
+    src_range = src['trans_range']
     result = set()
-    neigh_stand_alones = []
-    for neigh_z in veh_table.values(veh_id)['neighbor_zones']:
-        neigh_stand_alones += zone_stand_alone[neigh_z]  # adding all the SAVs in the neighbor zones to a list
-
-    for j in neigh_stand_alones:
-        if j != veh_id:
-            euclidian_dist = det_dist(veh_id, veh_table, j, veh_table)
-
-            if euclidian_dist <= min(veh_table.values(veh_id)['trans_range'],
-                                     veh_table.values(j)['trans_range']):
-                result.add(j)
-
+    for j in others:
+        dst = veh_table.values(j)
+        if dst is not None and det_dist(veh_id, veh_table, j, veh_table) <= min(src_range, dst['trans_range']):
+            result.add(j)
     return result
 
 
@@ -1138,21 +1138,25 @@ def update_sa_net_graph(veh_table, k, near_sa, net_graph):
 
 
 def det_dist(id1, table1, id2, table2):
-    """
+    """Original haversine metric with symmetric tick-local memoization.
 
-    :param id1: vehicle 1
-    :param table1: self.veh_table or self.bus_table
-    :param id2: vehicle 2
-    :param table2: self.veh_table or self.bus_table
-    :return: distance between two vehicles or buses
+    Coordinates are part of the key, so same-tick mobility mutations do not
+    produce stale results in tests or during simulation.
     """
-    dist = hs.haversine((table1.values(id1)["lat"],
-                         table1.values(id1)["long"]),
-                        (table2.values(id2)['lat'],
-                         table2.values(id2)['long']),
-                        unit=hs.Unit.METERS)
-
-    return dist
+    a, b = table1.values(id1), table2.values(id2)
+    a_lat, a_lon = a['lat'], a['long']
+    b_lat, b_lon = b['lat'], b['long']
+    cache = globals().get('_MMZCA_DISTANCE_CACHE')
+    if cache is None:
+        return hs.haversine((a_lat, a_lon), (b_lat, b_lon), unit=hs.Unit.METERS)
+    left, right = (id(a), a_lat, a_lon), (id(b), b_lat, b_lon)
+    key = (left, right) if left[0] <= right[0] else (right, left)
+    try:
+        return cache[key]
+    except KeyError:
+        value = hs.haversine((a_lat, a_lon), (b_lat, b_lon), unit=hs.Unit.METERS)
+        cache[key] = value
+        return value
 
 
 def det_pot_ch(veh_id, near_sa, n_near_sa):
@@ -1943,21 +1947,29 @@ def _mmzca_normalized_weights(weights, count, name):
 
 
 def _mmzca_heading(record, zones, zone_level, lon_scale):
-    """Local motion unit vector using the last DISTINCT occupied zone."""
+    """Local motion unit vector using last distinct zone; memoized per state."""
     previous = record.get('prev_' + zone_level + '_zone')
     if previous is None or previous == record.get(zone_level + '_zone'):
         return None
+    cache = globals().get('_MMZCA_HEADING_CACHE')
+    key = (id(record), id(zones), previous, zone_level,
+           record['long'], record['lat'], lon_scale)
+    if cache is not None and key in cache:
+        return cache[key]
     cell = zones.zone_hash.values(previous)
     if cell is None:
-        return None
-    cx = (float(cell['min_long']) + float(cell['max_long'])) / 2
-    cy = (float(cell['min_lat']) + float(cell['max_lat'])) / 2
-    dx = (float(record['long']) - cx) * lon_scale
-    dy = float(record['lat']) - cy
-    length = math.hypot(dx, dy)
-    if length <= 1e-15 or not math.isfinite(length):
-        return None
-    return dx / length, dy / length
+        value = None
+    else:
+        cx = (float(cell['min_long']) + float(cell['max_long'])) / 2
+        cy = (float(cell['min_lat']) + float(cell['max_lat'])) / 2
+        dx = (float(record['long']) - cx) * lon_scale
+        dy = float(record['lat']) - cy
+        length = math.hypot(dx, dy)
+        value = ((dx / length, dy / length)
+                 if length > 1e-15 and math.isfinite(length) else None)
+    if cache is not None:
+        cache[key] = value
+    return value
 
 
 def _mmzca_angular_difference(a, b, zones, level, lon_scale):
