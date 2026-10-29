@@ -598,6 +598,109 @@ class DataTable:
                     group.discard(parent_id)
         return False
 
+    def _mmzca_switch_valid_parents(self, config):
+        """Electively reparent only within the SAME valid root, with hysteresis.
+
+        No root switching: members retain their original root as long as its
+        committed path stays valid. For an invalid path, existing detachment / SA
+        reattachment remains the separate recovery behavior.
+        """
+        members = sorted(
+            (vid for vid in self.veh_table.ids()
+             if not self._mmzca_is_sa(vid)
+             and self.veh_table.values(vid).get('cluster_head') is not True),
+            key=lambda vid: int(self.veh_table.values(vid).get('hop_count') or 0)
+        )
+        # Parent pointers are the source of truth; reuse this tree across
+        # all candidate evaluations in the current tick rather than rescanning
+        # every vehicle for each CM.
+        children = self._mmzca_children()
+        switches = 0
+        for veh_id in members:
+            st = self.veh_table.values(veh_id)
+            if (st is None or self._mmzca_is_sa(veh_id)
+                    or not self._mmzca_valid_committed_path(veh_id, config)):
+                continue
+            root_id = self._mmzca_root(veh_id)
+            current_parent = self._mmzca_parent(veh_id)
+            if root_id is None or current_parent is None:
+                continue
+            descendants = set()
+            stack = [(veh_id, 0)]
+            tail_depth = 0
+            while stack:
+                node_id, distance = stack.pop()
+                if node_id in descendants:
+                    break
+                descendants.add(node_id)
+                tail_depth = max(tail_depth, distance)
+                stack.extend((child, distance+1) for child in children.get(node_id, ()))
+            else:
+                bus_candidates, ch_candidates, cm_candidates, _ = util.det_near_ch(
+                    veh_id, self.veh_table, self.bus_table,
+                    self.zone_buses, self.zone_vehicles
+                )
+                bus_candidates, ch_candidates = set(bus_candidates), set(ch_candidates)
+                cm_candidates = set(cm_candidates)
+                # Ensure the incumbent is present for a fresh, comparable score.
+                if current_parent in self.bus_table.ids():
+                    bus_candidates.add(current_parent)
+                elif current_parent == root_id:
+                    ch_candidates.add(current_parent)
+                else:
+                    cm_candidates.add(current_parent)
+                for group in (bus_candidates, ch_candidates, cm_candidates):
+                    group.difference_update(descendants)
+                    group.intersection_update(
+                        {j for j in group if self._mmzca_root(j) == root_id}
+                    )
+                if not (bus_candidates or ch_candidates or cm_candidates):
+                    continue
+                parent_id, score, detail = util.choose_mmzca_parent(
+                    veh_id, self.veh_table, self.bus_table,
+                    bus_candidates, ch_candidates, cm_candidates,
+                    self.micro_zones, self.meso_zones, self.macro_zones,
+                    config, self.time, return_details=True,
+                    allowed_root_id=root_id,
+                    extra_descendant_hops=tail_depth
+                )
+                if parent_id is None or parent_id == current_parent:
+                    continue
+                # The selector compares the incumbent and alternative under
+                # one evaluation mode and enforces parent_hysteresis_delta.
+                # Do not switch if the incumbent was not comparably scored.
+                feasible = detail.get('all_candidates', {})
+                incumbent = feasible.get(current_parent)
+                selected = feasible.get(parent_id)
+                mode = detail.get('selection_mode')
+                key = 'G0' if mode == 'physical' else 'Gaff'
+                if (incumbent is None or selected is None or
+                        detail['root_id'] != root_id or
+                        current_parent not in feasible):
+                    continue
+                # In mixed freshness, only compare a common score; never
+                # treat missing affinity as an artificially favorable zero.
+                if mode != 'physical' and incumbent['kernel_status'] == 'unavailable':
+                    continue
+                improvement = incumbent[key] - selected[key]
+                if improvement <= float(config.parent_hysteresis_delta) + float(config.selection_tolerance):
+                    continue
+                try:
+                    moved = uhelp.reparent_within_root(
+                        veh_id, parent_id, self.veh_table, self.bus_table,
+                        config, self.meso_zones, self.macro_zones, score,
+                        child_map=children
+                    )
+                except ValueError:
+                    moved = False
+                if moved:
+                    children[current_parent].discard(veh_id)
+                    children[parent_id].add(veh_id)
+                    switches += 1
+        self._mmzca_sync_direct_children()
+        self.mmzca_parent_switches = getattr(self, 'mmzca_parent_switches', 0) + switches
+        return switches
+
     def update_cluster(self, veh_ids, config):
         """Maintain root-connected MMZCA trees; then join unresolved SAs.
 
@@ -655,6 +758,11 @@ class DataTable:
                 if (last.get('start_time') is not None and last.get('timer') is not None
                         and last['start_time'] + last['timer'] - 1 != self.time):
                     last['timer'] += 1
+
+        # Root-preserving voluntary parent switches for valid attached CMs.
+        # No elective root reassociation takes place here.
+        self._mmzca_sync_direct_children()
+        self._mmzca_switch_valid_parents(config)
 
         # Empty ordinary CHs can demote after a later macro-zone transition.
         # Buses remain persistent CHs. This test uses the actual parent graph.

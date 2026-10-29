@@ -2073,7 +2073,8 @@ def _mmzca_candidate_chain(j_id, joining_id, veh_table, bus_table, h_max):
 def choose_mmzca_parent(veh_id, veh_table, bus_table,
                         bus_candidates, ch_candidates, sub_ch_candidates,
                         micro_zones, meso_zones, macro_zones,
-                        config, current_time, return_details=False, rng=None):
+                        config, current_time, return_details=False, rng=None,
+                        allowed_root_id=None, extra_descendant_hops=0):
     """Unified direct-CH/CM MMZCA selection, without private distance code.
 
     Requires the MMZCA kernel utilities in the SAME existing util.py.
@@ -2100,12 +2101,22 @@ def choose_mmzca_parent(veh_id, veh_table, bus_table,
         if j == veh_id:
             continue
         record, table = _mmzca_node(j, veh_table, bus_table)
-        if record is None or record.get('admit_children') is False:
+        # A full parent may no longer admit NEW children, but an attached
+        # member must still be able to score its existing (grandfathered) link.
+        # Otherwise there is no comparable incumbent for hysteresis.
+        incumbent_parent = _mmzca_parent_id(i)
+        if record is None or (record.get('admit_children') is False
+                              and j != incumbent_parent):
             continue
         chain = _mmzca_candidate_chain(j, veh_id, veh_table, bus_table, h_max)
         if chain is None:
             continue
         root_id, depth_j = chain
+        # For an incumbent CM, preserve its root and fit its entire subtree.
+        if allowed_root_id is not None and root_id != allowed_root_id:
+            continue
+        if depth_j + 1 + int(extra_descendant_hops) > h_max:
+            continue
         link = mmzca_physical_link(veh_id, j, veh_table, table,
                                    meso_zones, macro_zones, config)
         if link is None:
@@ -2202,7 +2213,8 @@ def choose_mmzca_parent(veh_id, veh_table, bus_table,
 
     if incumbent in allowed and incumbent != chosen:
         improvement = feasible[incumbent][key] - feasible[chosen][key]
-        if improvement < float(config.parent_hysteresis_delta):
+        # An incumbent is retained unless improvement STRICTLY exceeds Delta_P.
+        if improvement <= float(config.parent_hysteresis_delta) + tol:
             chosen = incumbent
     score = feasible[chosen][key]
     details = dict(feasible[chosen], selection_mode=mode, all_candidates=feasible)

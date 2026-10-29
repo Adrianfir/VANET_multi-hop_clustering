@@ -673,6 +673,192 @@ def attach_to_parent(root_id, parent_id, veh_id,
 
     return bus_table, veh_table, stand_alone, zone_stand_alone
 
+
+def reparent_within_root(veh_id, new_parent_id, veh_table, bus_table,
+                         config, meso_zones, macro_zones, new_parent_cost,
+                         child_map=None):
+    """Atomically change an attached CM's parent while preserving its root.
+
+    Validation finishes BEFORE any mutation.  The entire descendant subtree
+    moves with the member, without detachment, cluster-record interruption,
+    or an SA/CH transition.  Throws ValueError for an invalid proposed move.
+    The caller must have already checked the *improvement* against hysteresis.
+    """
+    member = veh_table.values(veh_id)
+    if member is None or member.get('cluster_head') is True:
+        raise ValueError('Only attached ordinary CMs may switch parents')
+    root_id = member.get('root_ch') or member.get('primary_ch')
+    old_parent_id = get_parent(veh_id, veh_table, bus_table)
+    if root_id is None or old_parent_id is None:
+        raise ValueError('The member must have an existing valid root affiliation')
+    if new_parent_id == old_parent_id:
+        return False
+    root = get_node_state(root_id, veh_table, bus_table)
+    old_parent = get_node_state(old_parent_id, veh_table, bus_table)
+    new_parent = get_node_state(new_parent_id, veh_table, bus_table)
+    if not all(x is not None for x in (root, old_parent, new_parent)):
+        raise ValueError('Root or parent has departed')
+    if (get_root(new_parent_id, veh_table, bus_table) != root_id or
+            (new_parent_id != root_id and new_parent.get('root_connection_valid') is not True)):
+        raise ValueError('Elective switching across roots is prohibited')
+    if new_parent.get('admit_children') is False:
+        raise ValueError('New parent does not admit children')
+
+    # Derive current actual immediate-child edges; do not trust transitive
+    # legacy sub_cluster_members as a hierarchy or capacity measure.
+    if child_map is None:
+        child_map = {x: set() for x in veh_table.ids() | bus_table.ids()}
+        for node_id in veh_table.ids():
+            node = veh_table.values(node_id)
+            if node.get('cluster_head') is True:
+                continue
+            parent = (node.get('parent_node') or node.get('parent_id') or
+                      node.get('secondary_ch') or node.get('primary_ch'))
+            if parent in child_map:
+                child_map[parent].add(node_id)
+
+    # Validate the whole committed subtree, including its relative depths.
+    subtree, relative_depth, stack = [], {}, [(veh_id, 0)]
+    while stack:
+        node_id, rel = stack.pop()
+        if node_id in relative_depth:
+            raise ValueError('Cycle in existing subtree')
+        node = veh_table.values(node_id)
+        if node is None or get_root(node_id, veh_table, bus_table) != root_id:
+            raise ValueError('Existing subtree is not root-consistent')
+        # The move must not silently repair a previously broken hierarchy.
+        try:
+            expected = int(member['hop_count']) + rel
+            if node.get('hop_count') != expected:
+                raise ValueError('Existing subtree has inconsistent hop depths')
+        except (TypeError, KeyError):
+            raise ValueError('Existing subtree has missing hop depth')
+        relative_depth[node_id] = rel
+        subtree.append(node_id)
+        stack.extend((child, rel + 1) for child in child_map.get(node_id, ()))
+    if new_parent_id in relative_depth:
+        raise ValueError('Reparenting to oneself or a descendant creates a cycle')
+
+    # Validate the candidate's upstream path, including correct depth and
+    # physically feasible links. No remote/root membership list is assumed.
+    seen, cur = set(relative_depth), new_parent_id
+    while cur != root_id:
+        if cur in seen:
+            raise ValueError("Candidate's ancestry intersects the moved subtree")
+        seen.add(cur)
+        state = get_node_state(cur, veh_table, bus_table)
+        if (state is None or state.get('root_connection_valid') is not True or
+                get_root(cur, veh_table, bus_table) != root_id):
+            raise ValueError('New parent lacks a valid root connection')
+        parent_id = get_parent(cur, veh_table, bus_table)
+        parent = get_node_state(parent_id, veh_table, bus_table)
+        if parent is None or state.get('hop_count') != parent.get('hop_count', 0) + 1:
+            raise ValueError('Invalid candidate upstream depth')
+        parent_table = get_node_table(parent_id, veh_table, bus_table)
+        state_table = get_node_table(cur, veh_table, bus_table)
+        if util.det_dist(cur, state_table, parent_id, parent_table) > min(
+                float(state['trans_range']), float(parent['trans_range'])):
+            raise ValueError('Candidate upstream link is no longer feasible')
+        cur = parent_id
+    if root.get('cluster_head') is not True and get_node_table(root_id, veh_table, bus_table) is not bus_table:
+        raise ValueError('The committed root has lost CH status')
+
+    depth = int(new_parent['hop_count']) + 1
+    if depth + max(relative_depth.values()) > int(config.h_max):
+        raise ValueError('Moving this subtree exceeds the maximum hop count')
+    limit = int(config.max_ch_members if new_parent_id == root_id
+                else config.max_rn_members)
+    if len(child_map[new_parent_id]) >= limit:
+        raise ValueError('The new parent is full')
+    link = util.mmzca_physical_link(veh_id, new_parent_id,
+                                  veh_table, get_node_table(new_parent_id, veh_table, bus_table),
+                                  meso_zones, macro_zones, config)
+    if link is None:
+        raise ValueError('Proposed new parent link is not physically feasible')
+
+    # Compute every future bottleneck before touching ANY committed state.
+    upstream_Q = (0.0 if new_parent_id == root_id
+                  else new_parent.get('path_bottleneck'))
+    if upstream_Q is None:
+        raise ValueError('New parent has no verified upstream bottleneck')
+    prospective_Q = {}
+    for node_id in sorted(subtree, key=lambda n: relative_depth[n]):
+        node = veh_table.values(node_id)
+        if node_id == veh_id:
+            parent_Q, L = float(upstream_Q), float(link['L'])
+        else:
+            parent_id = get_parent(node_id, veh_table, bus_table)
+            if parent_id not in prospective_Q:
+                raise ValueError('Subtree has an inconsistent parent order')
+            parent_Q, L = prospective_Q[parent_id], node.get('committed_link_score')
+            if L is None:
+                raise ValueError('Descendant lacks a committed physical link score')
+            parent = get_node_state(parent_id, veh_table, bus_table)
+            if (parent is None or util.det_dist(node_id, veh_table, parent_id, veh_table)
+                    > min(float(node['trans_range']), float(parent['trans_range']))):
+                raise ValueError('Descendant has an invalid physical link')
+        prospective_Q[node_id] = max(float(parent_Q), float(L))
+
+    # Synchronous simulator commit: there is no externally visible intermediate
+    # tree state. All expected validation errors have already been raised.
+    old_parent.setdefault('direct_children', set()).discard(veh_id)
+    new_parent.setdefault('direct_children', set()).add(veh_id)
+    if old_parent_id == root_id:
+        root.setdefault('cluster_members', set()).discard(veh_id)
+        root.setdefault('gates', {}).pop(veh_id, None)
+    else:
+        old_parent.setdefault('sub_cluster_members', set()).discard(veh_id)
+    if new_parent_id == root_id:
+        root.setdefault('cluster_members', set()).add(veh_id)
+        root.setdefault('sub_cluster_members', set()).discard(veh_id)
+        root.setdefault('gates', {})[veh_id] = set(member.get('other_chs', ()))
+    else:
+        new_parent.setdefault('sub_cluster_members', set()).add(veh_id)
+        root.setdefault('sub_cluster_members', set()).add(veh_id)
+    if old_parent_id != root_id and new_parent_id == root_id:
+        root.setdefault('sub_cluster_members', set()).discard(veh_id)
+    # The previously accepted histogram of the moved child belongs to its old
+    # parent and must not contribute to its next kernel aggregation.
+    old_parent.setdefault('kernel_child_reports', {}).pop(veh_id, None)
+    old_parent.setdefault('kernel_known_children', set()).discard(veh_id)
+    old_parent['kernel_last_signature'] = None
+    new_parent.setdefault('kernel_child_reports', {}).pop(veh_id, None)
+    new_parent.setdefault('kernel_known_children', set()).discard(veh_id)
+    new_parent['kernel_last_signature'] = None
+    for p_id in (old_parent_id, new_parent_id):
+        p = get_node_state(p_id, veh_table, bus_table)
+        if p_id != root_id and p.get('role') != 'CH':
+            p['role'] = 'RN' if p.get('direct_children') else 'CM'
+    root['gate_chs'] = set().union(*(
+        set(xs) for xs in root.get('gates', {}).values()
+    )) if root.get('gates') else set()
+
+    member['parent_node'] = new_parent_id
+    member['parent_id'] = new_parent_id
+    member['secondary_ch'] = None if new_parent_id == root_id else new_parent_id
+    member['committed_link_score'] = float(link['L'])
+    member['current_parent_cost'] = float(new_parent_cost)
+    member['role'] = 'RN' if child_map.get(veh_id) else 'CM'
+    epoch = root.get('kernel_root_incarnation')
+    for node_id in sorted(subtree, key=lambda n: relative_depth[n]):
+        st = veh_table.values(node_id)
+        st['hop_count'] = depth + relative_depth[node_id]
+        st['root_ch'] = root_id
+        st['primary_ch'] = root_id
+        st['root_connection_valid'] = True
+        st['kernel_root_incarnation'] = epoch
+        st['path_bottleneck'] = prospective_Q[node_id]
+        st['kernel_last_signature'] = None  # force updated subtree hist versions
+    # Retain the same root-based CM residence episode, but record the changed
+    # immediate relay in the existing optional legacy metadata.
+    record = member.get('cluster_record')
+    if record is not None and getattr(record, 'tail', None) is not None:
+        fields = record.tail.value
+        if isinstance(fields, dict) and isinstance(fields.get('secondary_ch'), list):
+            fields['secondary_ch'].append(None if new_parent_id == root_id else new_parent_id)
+    return True
+
+
 def detach_from_current_cluster(veh_id, veh_table, bus_table, config,
                                 stand_alone, zone_stand_alone):
     """

@@ -70,6 +70,7 @@ if __name__ == "__main__":
     print(f'n_savs: {n_savs}')
     print(f'avg_chs: {sum(n_chs)/len(n_chs)}')
     print(f'avg_stand_alones: {sum(n_savs)/len(n_savs)}')
+    print(f'mmzca_same_root_parent_switches: {getattr(cluster, "mmzca_parent_switches", 0)}')
 
     print(f'tvct_t: {cluster.tvct_history}, avg_tvct: {cluster.avg_tvct_history}')
     # print(f'execution time: {end_time - start_time}')

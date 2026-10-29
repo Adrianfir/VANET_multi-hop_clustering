@@ -13,7 +13,7 @@ import xml.dom.minidom
 class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
-        data_density = 'largesize'
+        data_density = 'smallsize'
         trace_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
                          joinpath('traffic_data', 'final_data_Richmondhill_' + data_density,
                                   'sumoTrace_no_bus_and_rsu.xml'))
