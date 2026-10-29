@@ -31,8 +31,8 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = float()
-        alpha_micro = 0.25
-        alpha_meso = 0.5
+        alpha_micro = 0.5
+        alpha_meso = 0.75
         alpha_macro= 1
         veh_trans_range = 300
         bus_trans_range = 800

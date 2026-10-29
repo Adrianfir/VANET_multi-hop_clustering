@@ -11,15 +11,20 @@ import haversine as hs
 import utils.util as util
 
 def is_bus(node_id):
-    return isinstance(node_id, str) and node_id.startswith('bus')
+    # Match the SUMO ID convention used by DataTable.update().
+    return isinstance(node_id, str) and 'bus' in node_id
 
 
 def is_vehicle(node_id):
-    return isinstance(node_id, str) and node_id.startswith('veh')
+    return isinstance(node_id, str) and not is_bus(node_id)
 
 
 def get_node_table(node_id, veh_table, bus_table):
-    return bus_table if is_bus(node_id) else veh_table
+    # The actual HashTable membership, not an ID naming convention, is
+    # authoritative for data already present in the simulation.
+    if bus_table.values(node_id) is not None:
+        return bus_table
+    return veh_table
 
 
 def get_node_state(node_id, veh_table, bus_table):
@@ -28,70 +33,82 @@ def get_node_state(node_id, veh_table, bus_table):
 
 def sync_node_cluster_fields(node_id, veh_table, bus_table):
     """
-    Synchronize compatibility fields:
-      - root_ch
-      - parent_node
-      - hop_count
-    with the legacy fields:
-      - cluster_head
-      - primary_ch
-      - secondary_ch
+    Keep legacy and generalized fields consistent without losing a committed
+    MMZCA parent, depth, bottleneck, or kernel state.
+
+    In particular, the legacy secondary_ch is the IMMEDIATE parent, not an
+    assumption that the member is exactly two hops away from the root.
     """
     table = get_node_table(node_id, veh_table, bus_table)
     st = table.values(node_id)
+    if st is None:
+        return
 
-    if is_bus(node_id):
+    if table is bus_table or st.get('cluster_head') is True:
         st['root_ch'] = node_id
+        st['parent_id'] = None
         st['parent_node'] = None
         st['hop_count'] = 0
+        st['path_bottleneck'] = 0.0
+        st['committed_link_score'] = None
+        st['root_connection_valid'] = True
+        st.setdefault('direct_children', set())
         return
 
-    if st['cluster_head'] is True:
-        st['root_ch'] = node_id
-        st['parent_node'] = None
-        st['hop_count'] = 0
+    root_id = st.get('root_ch') or st.get('primary_ch')
+    if root_id is None:
+        reset_cluster_fields(node_id, veh_table, bus_table)
         return
 
-    if st['primary_ch'] is None:
-        st['root_ch'] = None
-        st['parent_node'] = None
-        st['hop_count'] = None
-        return
-
-    st['root_ch'] = st['primary_ch']
-    if st['secondary_ch'] is None:
-        st['parent_node'] = st['primary_ch']
-        if st.get('hop_count') is None or st.get('hop_count') < 1:
-            st['hop_count'] = 1
-    else:
-        st['parent_node'] = st['secondary_ch']
-        if st.get('hop_count') is None or st.get('hop_count') < 2:
-            st['hop_count'] = 2
+    parent_id = (st.get('parent_node') or st.get('parent_id') or
+                 st.get('secondary_ch') or root_id)
+    st['root_ch'] = root_id
+    st['primary_ch'] = root_id
+    st['parent_node'] = parent_id
+    st['parent_id'] = parent_id
+    st['secondary_ch'] = None if parent_id == root_id else parent_id
+    if st.get('hop_count') is None:
+        parent = get_node_state(parent_id, veh_table, bus_table)
+        parent_depth = parent.get('hop_count') if parent else None
+        st['hop_count'] = (int(parent_depth) + 1
+                           if parent_depth is not None else None)
+    st.setdefault('direct_children', set())
+    st.setdefault('root_connection_valid', False)
+    st.setdefault('path_bottleneck', None)
+    st.setdefault('committed_link_score', None)
+    st['role'] = 'RN' if st['direct_children'] else 'CM'
 
 
 def reset_cluster_fields(node_id, veh_table, bus_table):
     table = get_node_table(node_id, veh_table, bus_table)
     st = table.values(node_id)
 
-    if is_vehicle(node_id):
+    if st is not None and table is veh_table and st.get('cluster_head') is not True:
         st['primary_ch'] = None
         st['secondary_ch'] = None
         st['root_ch'] = None
+        st['parent_id'] = None
         st['parent_node'] = None
         st['hop_count'] = None
         st['current_root_cost'] = None
         st['current_parent_cost'] = None
+        st['path_bottleneck'] = None
+        st['committed_link_score'] = None
+        st['root_connection_valid'] = False
+        st['kernel_descriptor'] = None
+        st['direct_children'] = set()
+        st['role'] = 'SA'
 
 def is_rn(node_id, veh_table, bus_table):
     """
     RN = non-CH attached vehicle with at least one downstream sub-member.
     """
-    if is_bus(node_id):
+    if get_node_table(node_id, veh_table, bus_table) is bus_table:
         return False
     st = veh_table.values(node_id)
     return (st['cluster_head'] is False and
             st['primary_ch'] is not None and
-            len(st.get('sub_cluster_members', set())) > 0)
+            len(st.get('direct_children', set())) > 0)
 
 def zone_index(zone_id):
     """
@@ -249,10 +266,12 @@ def candidate_parent_hop(candidate_id, veh_table, bus_table):
 
 def node_load(node_id, veh_table, bus_table):
     st = get_node_state(node_id, veh_table, bus_table)
-
-    direct_members = len(st.get('cluster_members', set()))
-    downstream = len(st.get('sub_cluster_members', set()))
-    return direct_members + downstream
+    # Direct-child admission is bounded by direct capacity, not by a
+    # transitive root membership list that may contain grandchildren.
+    direct = st.get('direct_children')
+    if direct is not None:
+        return len(direct)
+    return len(st.get('cluster_members', set()))
 
 def normalized_node_load(node_id, veh_table, bus_table, config, is_root=False):
     load = node_load(node_id, veh_table, bus_table)
@@ -578,9 +597,49 @@ def attach_to_parent(root_id, parent_id, veh_id,
                      stand_alone, zone_stand_alone, other_vehs,
                      root_cost_value=None, parent_cost_value=None):
     """
-    Generalized attachment wrapper.
-    Uses old add_member/add_sub_member underneath, but updates generalized fields too.
+    Commit a fresh SA attachment to a validated arbitrary-depth parent chain.
+
+    Preserve the legacy membership tables. A move of an ALREADY ATTACHED CM
+    requires an atomic subtree-reparent operation and is rejected here rather
+    than silently corrupting its descendants or the cluster episode record.
     """
+    member = veh_table.values(veh_id)
+    root = get_node_state(root_id, veh_table, bus_table)
+    parent = get_node_state(parent_id, veh_table, bus_table)
+    if member is None or root is None or parent is None:
+        raise ValueError('MMZCA attachment references a missing node')
+    if veh_id in (root_id, parent_id):
+        raise ValueError('A member cannot be its own root or parent')
+    if get_node_table(root_id, veh_table, bus_table) is not bus_table and not root.get('cluster_head'):
+        raise ValueError('Selected root is not a current CH')
+    if (member.get('primary_ch') is not None or member.get('parent_node') is not None
+            or member.get('parent_id') is not None):
+        raise ValueError('A currently attached member needs atomic subtree reparenting')
+
+    # Validate the entire parent chain, not just a presumed two-hop RN.
+    seen = {veh_id}
+    cursor = parent_id
+    while cursor != root_id:
+        if cursor in seen:
+            raise ValueError('Cycle detected in the chosen parent chain')
+        seen.add(cursor)
+        node = get_node_state(cursor, veh_table, bus_table)
+        if (node is None or node.get('root_connection_valid') is False or
+                get_root(cursor, veh_table, bus_table) != root_id):
+            raise ValueError('Parent chain is not root-connected')
+        cursor = get_parent(cursor, veh_table, bus_table)
+        if cursor is None:
+            raise ValueError('Parent chain does not reach its root')
+
+    parent_depth = get_hop_count(parent_id, veh_table, bus_table)
+    if parent_depth is None or int(parent_depth) + 1 > int(config.h_max):
+        raise ValueError('Attachment violates the MMZCA maximum hop count')
+    capacity = (config.max_ch_members if parent_id == root_id
+                else config.max_rn_members)
+    children = parent.get('direct_children', set())
+    if len(children) >= int(capacity) and veh_id not in children:
+        raise ValueError('The selected parent has reached its child capacity')
+
     # direct attachment to root
     if parent_id == root_id:
         bus_table, veh_table, stand_alone, zone_stand_alone = util.add_member(
@@ -595,15 +654,21 @@ def attach_to_parent(root_id, parent_id, veh_id,
             root_id, bus_table, veh_id, parent_id, veh_table, config, parent_cost_value, sec,
             bus_candidates, ch_candidates, stand_alone, zone_stand_alone, other_vehs
         )
-        parent_hop = get_hop_count(parent_id, veh_table, bus_table)
         veh_table.values(veh_id)['root_ch'] = root_id
         veh_table.values(veh_id)['parent_node'] = parent_id
-        veh_table.values(veh_id)['hop_count'] = None if parent_hop is None else parent_hop + 1
+        veh_table.values(veh_id)['hop_count'] = int(parent_depth) + 1
 
     veh_table.values(veh_id)['primary_ch'] = root_id
     veh_table.values(veh_id)['secondary_ch'] = None if parent_id == root_id else parent_id
+    veh_table.values(veh_id)['parent_id'] = parent_id
     veh_table.values(veh_id)['current_root_cost'] = root_cost_value
     veh_table.values(veh_id)['current_parent_cost'] = parent_cost_value
+    veh_table.values(veh_id)['path_bottleneck'] = None
+    veh_table.values(veh_id)['committed_link_score'] = None
+    veh_table.values(veh_id)['kernel_descriptor'] = None
+    veh_table.values(veh_id)['kernel_root_incarnation'] = root.get('kernel_root_incarnation')
+    veh_table.values(veh_id)['root_connection_valid'] = True
+    parent.setdefault('direct_children', set()).add(veh_id)
     veh_table.values(veh_id)['unresolved_start_macro_zone'] = None
 
     return bus_table, veh_table, stand_alone, zone_stand_alone
@@ -614,13 +679,13 @@ def detach_from_current_cluster(veh_id, veh_table, bus_table, config,
     Generic detach wrapper.
     """
     st = veh_table.values(veh_id)
-    root_id = st.get('primary_ch')
-    parent_id = st.get('secondary_ch')
+    root_id = get_root(veh_id, veh_table, bus_table)
+    parent_id = get_parent(veh_id, veh_table, bus_table)
 
-    if root_id is None:
+    if root_id is None or parent_id is None:
         return veh_table, bus_table, stand_alone, zone_stand_alone
 
-    if parent_id is None:
+    if parent_id == root_id:
         veh_table, bus_table, stand_alone, zone_stand_alone = util.remove_member(
             veh_id, root_id, veh_table, bus_table, config, stand_alone, zone_stand_alone
         )
@@ -669,18 +734,20 @@ def choose_best_parent_for_root(veh_id, root_id, candidate_parents,
 def get_parent(node_id, veh_table, bus_table):
     st = get_node_state(node_id, veh_table, bus_table)
 
-    if is_bus(node_id):
+    if get_node_table(node_id, veh_table, bus_table) is bus_table:
         return None
     if st['cluster_head'] is True:
         return None
     if st.get('parent_node') is not None:
         return st['parent_node']
+    if st.get('parent_id') is not None:
+        return st['parent_id']
     if st.get('secondary_ch') is not None:
         return st['secondary_ch']
     return st.get('primary_ch')
 
 def candidate_type(node_id, veh_table, bus_table):
-    if is_bus(node_id):
+    if get_node_table(node_id, veh_table, bus_table) is bus_table:
         return 'root'
     st = veh_table.values(node_id)
     if st['cluster_head'] is True:
@@ -860,6 +927,3 @@ def intra_cluster_switch_allowed(veh_id, new_cand_id, veh_table, bus_table):
         new_root = get_root(new_cand_id, veh_table, bus_table)
 
     return new_root == current_root
-
-
-
