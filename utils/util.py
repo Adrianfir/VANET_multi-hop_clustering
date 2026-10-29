@@ -159,6 +159,8 @@ def initiate_new_veh(veh, zones, micro_zone_id, meso_zone_id, macro_zone_id, con
                 mac=mac_address(),
                 counter=config.counter,  # a counter_time to search and join a cluster
                 start_ch_zone=None,  # This is the zone that vehicle starts becoming a ch
+                stability_episodes=[],  # compressed, root-based MMZCA metric states
+                stability_last_tick=None,
                 cluster_record=LinkedList(None, {'is_ch': False, 'secondary_ch': list(), 'start_time': None,
                                                  'ef': None,  'timer': None, 'interrupt': list()}),  # the linked_list
                 role='SA',

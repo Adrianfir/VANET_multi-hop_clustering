@@ -42,6 +42,7 @@ if __name__ == "__main__":
         cluster.update_cluster(cluster.veh_table.ids(), configs)
         cluster.stand_alones_cluster(configs)
         cluster.update_kernels(configs)
+        cluster.record_mmzca_stability()
 
         tvct_t, avg_tvct_t = cluster.update_tvct(pre_states)
         # cluster.update_other_connections()
@@ -59,6 +60,8 @@ if __name__ == "__main__":
     # cluster.print_table()
     # nx.draw(cluster.ch_net, with_labels=False)
     print(f'stability_evaluation: {cluster.vcsm(configs)}')
+    print(f'VCSM_R: {cluster.vcsm_r(configs)}')
+    print(f'VCSM_CM: {cluster.vcsm_cm(configs)}')
     # print(f'connection_evaluation: {sum(connections)/len(connections)}->{connections}')
     print('\n')
     print(f'n_vehs: {len(cluster.veh_table.ids())}')

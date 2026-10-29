@@ -131,6 +131,10 @@ class DataTable:
                                                                    )
                                         )
 
+        # Initial SUMO timestep is an observed tick, too. Ordinary vehicles
+        # start as SAs, so this makes their presence denominator exact.
+        self.record_mmzca_stability()
+
     def update(self, config):
         """
         Update bus_table and veh_table for the next timestep.
@@ -364,6 +368,41 @@ class DataTable:
         for node_id, child_ids in children.items():
             self._mmzca_record(node_id)['direct_children'] = child_ids
         return children
+
+    def record_mmzca_stability(self):
+        """Record one end-of-tick role/root state per ordinary vehicle.
+
+        Run once after clustering in each 1-second SUMO tick. Records stay in
+        veh_table and are run-length encoded. Unlike legacy cluster_record,
+        these episodes also represent empty/effective CH states and in-area
+        presence accurately. Parent switches WITHIN one root do not split CM
+        residence episodes. Bus CHs are excluded from vehicle-based metrics.
+        """
+        children = self._mmzca_children()
+        for veh_id in self.veh_table.ids():
+            st = self.veh_table.values(veh_id)
+            if not st.get('in_area', False):
+                state = ('OUT', None, False)
+            elif st.get('cluster_head') is True:
+                state = ('CH', veh_id, bool(children.get(veh_id)))
+            else:
+                root = st.get('root_ch') or st.get('primary_ch')
+                state = ('CM', root, True) if root is not None else ('SA', None, False)
+
+            last_tick = st.get('stability_last_tick')
+            if last_tick == self.time:
+                raise RuntimeError('record_mmzca_stability must run once per tick')
+            episodes = st.setdefault('stability_episodes', [])
+            if (episodes and episodes[-1]['end_time'] == self.time - 1 and
+                    (episodes[-1]['role'], episodes[-1]['root'],
+                     episodes[-1]['effective']) == state):
+                episodes[-1]['end_time'] = self.time
+                episodes[-1]['timer'] += 1
+            else:
+                episodes.append(dict(start_time=self.time, end_time=self.time,
+                                     timer=1, role=state[0], root=state[1],
+                                     effective=state[2]))
+            st['stability_last_tick'] = self.time
 
     def _mmzca_valid_committed_path(self, node_id, config):
         """Check exactly the committed parent chain and each physical edge."""
@@ -957,7 +996,7 @@ class DataTable:
             total_clusters += one_veh
         return np.divide(total_clusters, len(self.veh_table.ids()) + len(self.left_veh) - n_sav_ch)
 
-    def vcsm(self, configs):
+    def vcsm_legacy(self, configs):
         """
         Evaluates VCSM using root-cluster consistency for MMZCA.
 
@@ -1040,6 +1079,232 @@ class DataTable:
             return 0.0
 
         return total_vcsm / n_vm
+
+
+    def _mmzca_stability_summary(self):
+        """Aggregate root-based MMZCA residence from compressed vehicle episodes.
+
+        Observation unit: one simulation tick (= 1 second for these SUMO
+        traces). Only ticks with in_area=True enter P_i. A CM and a relay RN
+        are the SAME effective member state; their immediate parent may change
+        without causing a new root-cluster episode.
+
+        The separate historical cluster_record LinkedList is kept intact for
+        the existing clustering logic and vcsm_legacy() comparison.
+        """
+        vehicles = [(vid, self.veh_table.values(vid)) for vid in self.veh_table.ids()]
+        vehicles += list(self.left_veh.items())
+
+        # Prevent a partially updated current tick from producing a plausible
+        # but incorrect metric.
+        for vid, st in vehicles:
+            if vid in self.veh_table.ids() and st.get('stability_last_tick') != self.time:
+                raise RuntimeError(
+                    'Call record_mmzca_stability() after clustering every tick '
+                    'before evaluating MMZCA stability metrics'
+                )
+
+        totals = dict(
+            presence=0.0, A=0.0, A_cm=0.0, contribution_r=0.0,
+            weighted_R=0.0, switches=0.0, switch_den=0.0,
+            ch_role_time=0.0, ch_role_runs=0,
+            ch_effective_time=0.0, ch_effective_runs=0,
+            cm_episode_time=0.0, cm_episode_count=0,
+            empty_ch_time=0.0, vcsm_sum=0.0,
+            vcsm_member_count=0, vcsm_cm_sum=0.0,
+            R_cm_sum=0.0, R_cm_weighted=0.0,
+            A_cm_conditional=0.0, P_cm_conditional=0.0,
+            cm_switches=0.0, cm_switch_den=0.0
+        )
+        cm_per_vehicle = {}
+
+        def root_switches(sequence):
+            return sum(a != b for a, b in zip(sequence, sequence[1:]))
+
+        def concentration(residence, duration):
+            if duration <= 0:
+                return 0.0
+            return sum((value / duration) ** 2 for value in residence.values())
+
+        def quality(switches, duration):
+            if duration <= 1:
+                return 1.0
+            return max(0.0, min(1.0, 1.0 - switches / (duration - 1.0)))
+
+        for vid, st in vehicles:
+            episodes = st.get('stability_episodes', ())
+            presence = 0.0
+            A_cm = 0.0
+            A = 0.0
+            cm_residence = {}
+            effective_residence = {}
+            cm_sequence, effective_sequence = [], []
+            cm_episode_durations = []
+            ch_role_lifetimes, ch_effective_lifetimes = [], []
+            current_ch_role_run = 0.0
+            current_ch_effective_run = 0.0
+            empty_ch_time = 0.0
+
+            for episode in episodes:
+                duration = float(episode['timer'])
+                if duration <= 0:
+                    continue
+                role, root = episode['role'], episode['root']
+                effective = bool(episode['effective'])
+
+                if role != 'OUT':
+                    presence += duration
+                if role == 'CM' and root is not None:
+                    A_cm += duration
+                    cm_episode_durations.append(duration)
+                    cm_sequence.append(root)
+                    cm_residence[root] = cm_residence.get(root, 0.0) + duration
+
+                if role == 'CH':
+                    current_ch_role_run += duration
+                    if not effective:
+                        empty_ch_time += duration
+                elif current_ch_role_run:
+                    ch_role_lifetimes.append(current_ch_role_run)
+                    current_ch_role_run = 0.0
+
+                if role == 'CH' and effective:
+                    current_ch_effective_run += duration
+                elif current_ch_effective_run:
+                    ch_effective_lifetimes.append(current_ch_effective_run)
+                    current_ch_effective_run = 0.0
+
+                eff_root = root if ((role == 'CM') or
+                                    (role == 'CH' and effective)) else None
+                if eff_root is not None:
+                    A += duration
+                    effective_sequence.append(eff_root)
+                    effective_residence[eff_root] = (
+                        effective_residence.get(eff_root, 0.0) + duration
+                    )
+
+            if current_ch_role_run:
+                ch_role_lifetimes.append(current_ch_role_run)
+            if current_ch_effective_run:
+                ch_effective_lifetimes.append(current_ch_effective_run)
+
+            R = concentration(effective_residence, A)
+            S = root_switches(effective_sequence)
+            Q = quality(S, A)
+            R_cm = concentration(cm_residence, A_cm)
+            S_cm = root_switches(cm_sequence)
+            Q_cm = quality(S_cm, A_cm)
+
+            totals['presence'] += presence
+            totals['A'] += A
+            totals['A_cm'] += A_cm
+            totals['contribution_r'] += A * R * Q
+            totals['weighted_R'] += A * R
+            totals['switches'] += S
+            totals['switch_den'] += max(A - 1.0, 0.0)
+            totals['ch_role_time'] += sum(ch_role_lifetimes)
+            totals['ch_role_runs'] += len(ch_role_lifetimes)
+            totals['ch_effective_time'] += sum(ch_effective_lifetimes)
+            totals['ch_effective_runs'] += len(ch_effective_lifetimes)
+            totals['cm_episode_time'] += sum(cm_episode_durations)
+            totals['cm_episode_count'] += len(cm_episode_durations)
+            totals['empty_ch_time'] += empty_ch_time
+
+            if A_cm > 0 and presence > 0:
+                gamma = len(cm_episode_durations)
+                totals['vcsm_sum'] += A_cm / (gamma * presence)
+                totals['vcsm_member_count'] += 1
+                contribution_cm = (A_cm / presence) * R_cm * Q_cm
+                totals['vcsm_cm_sum'] += contribution_cm
+                totals['R_cm_sum'] += R_cm
+                totals['R_cm_weighted'] += A_cm * R_cm
+                totals['A_cm_conditional'] += A_cm
+                totals['P_cm_conditional'] += presence
+                totals['cm_switches'] += S_cm
+                totals['cm_switch_den'] += max(A_cm - 1.0, 0.0)
+                cm_per_vehicle[vid] = {
+                    'vid': vid,
+                    'P': presence,
+                    'A_CM': A_cm,
+                    'eta_CM': A_cm / presence,
+                    'R_CM': R_cm,
+                    'Q_CM': Q_cm,
+                    'S_CM': float(S_cm),
+                    'switch_den_CM': max(A_cm - 1.0, 0.0),
+                    'contribution': contribution_cm,
+                    'num_distinct_CH_CM': len(cm_residence),
+                }
+
+        P = totals['presence']
+        A = totals['A']
+        n_cm = totals['vcsm_member_count']
+        ch_time = totals['ch_role_time']
+        vcsm_r = {
+            'vcsm_r': totals['contribution_r'] / P if P else 0.0,
+            'AR': A / P if P else 0.0,
+            'average_R': totals['weighted_R'] / A if A else 0.0,
+            'CCR': (totals['switches'] / totals['switch_den']
+                    if totals['switch_den'] else 0.0),
+            'avg_L_CM': (totals['cm_episode_time'] / totals['cm_episode_count']
+                         if totals['cm_episode_count'] else 0.0),
+            'ECHR': totals['empty_ch_time'] / ch_time if ch_time else 0.0,
+            'avg_ch_lifetime_role': (ch_time / totals['ch_role_runs']
+                                     if totals['ch_role_runs'] else 0.0),
+            'avg_ch_lifetime_effective': (
+                totals['ch_effective_time'] / totals['ch_effective_runs']
+                if totals['ch_effective_runs'] else 0.0
+            ),
+            'num_ch_role_episodes': totals['ch_role_runs'],
+            'num_ch_effective_episodes': totals['ch_effective_runs'],
+            'num_cm_episodes': totals['cm_episode_count'],
+            'total_ch_role_time': ch_time,
+            'total_ch_effective_time': totals['ch_effective_time'],
+            'total_ch_role_time_raw': ch_time,
+            'total_empty_ch_time': totals['empty_ch_time'],
+            'total_presence': P,
+            'total_clustered_time': A,
+            'total_switches': totals['switches'],
+        }
+
+        vcsm_cm = {
+            'vcsm_cm': totals['vcsm_cm_sum'] / n_cm if n_cm else 0.0,
+            'average_R_CM': totals['R_cm_sum'] / n_cm if n_cm else 0.0,
+            'average_R_CM_weighted': (
+                totals['R_cm_weighted'] / totals['A_cm'] if totals['A_cm'] else 0.0
+            ),
+            'AR_CM_conditional': (
+                totals['A_cm_conditional'] / totals['P_cm_conditional']
+                if totals['P_cm_conditional'] else 0.0
+            ),
+            'CCR_CM': (totals['cm_switches'] / totals['cm_switch_den']
+                        if totals['cm_switch_den'] else 0.0),
+            'num_cm_vehicles': n_cm,
+            'total_A_CM': totals['A_cm_conditional'],
+            'total_P_CM_vehicles': totals['P_cm_conditional'],
+            'total_switches_CM': totals['cm_switches'],
+        }
+        return {
+            'vcsm': totals['vcsm_sum'] / n_cm if n_cm else 0.0,
+            'vcsm_r': vcsm_r,
+            'vcsm_cm': vcsm_cm,
+            'per_vehicle': cm_per_vehicle,
+        }
+
+    def vcsm(self, configs):
+        """MMZCA VCSM: average root-cluster CM residence per CM segment/presence."""
+        return self._mmzca_stability_summary()['vcsm']
+
+    def vcsm_r(self, configs):
+        """MMZCA VCSM_R, including effective CH and CM occupancy diagnostics."""
+        return self._mmzca_stability_summary()['vcsm_r']
+
+    def vcsm_cm(self, configs, return_per_vehicle=False):
+        """MMZCA CM-conditioned root-association residence stability."""
+        result = self._mmzca_stability_summary()
+        output = result['vcsm_cm']
+        if return_per_vehicle:
+            output = dict(output, per_vehicle=result['per_vehicle'])
+        return output
 
     def _tvct_state(self, veh_id):
         """
