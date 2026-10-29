@@ -13,7 +13,7 @@ import xml.dom.minidom
 class Inputs:
     def __init__(self):
         # Constants that we need to pass as arguments
-        data_density = 'smallsize'
+        data_density = 'largesize'
         trace_path = str(pathlib.Path(__file__).parent.parent.parent.absolute().
                          joinpath('traffic_data', 'final_data_Richmondhill_' + data_density,
                                   'sumoTrace_no_bus_and_rsu.xml'))
@@ -31,26 +31,26 @@ class Inputs:
                     max_lat=44.012923,
                     max_long=-79.238069)
         alpha = float()
-        alpha_micro = 0.5
-        alpha_meso = 0.75
-        alpha_macro= 1
+        alpha_micro = 0.2
+        alpha_meso = 0.4
+        alpha_macro= 0.8
         veh_trans_range = 300
-        bus_trans_range = 800
+        bus_trans_range = 300
         start_time = 1500
         iter = 200
-        counter = 3
+        counter = 4
         priority_counter = 3
         map_zoom = 15.3
         center_loc = [43.869846, -79.443523]
         fps = 5
-        weights_s = np.array([1.0, 0.0, 0.0])       # direction's angle, speed, distance for single-hop
-        weights_m = np.array([0.6, 0.2, 0.2])       # direction's angle, speed, distance for multi-hop
+        weights_s = np.array([0.9, 0.0, 0.1])       # direction's angle, speed, distance for single-hop
+        weights_m = np.array([0.4, 0.2, 0.2])       # direction's angle, speed, distance for multi-hop
 
         # MMZCA physical-link and affinity-aware parent-selection parameters.
         # Root CH and CM parent candidates share weights_m as physical w_L.
         omega_meso = 0.5
         omega_macro = 0.5
-        iota = 0.7
+        iota = 0.5
         v0 = 1.0                           # speed normalization floor (m/s)
         weights_G = np.array([0.4, 0.4, 0.2])  # bottleneck Q, L_aff, hop depth
         selection_tolerance = 1e-8
@@ -59,7 +59,7 @@ class Inputs:
 
         # ---------- New Values I need for new_mmzca ----------
 
-        h_max = 2
+        h_max = 3
         root_hysteresis_delta = 0.05
         parent_hysteresis_delta = 0.05
 
