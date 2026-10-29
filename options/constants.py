@@ -80,7 +80,7 @@ class Inputs:
 
         # Maximum number of parent links from a root CH to any CM:
         # d_i = d_parent + 1 <= H_max.  A CM at H_max cannot admit children.
-        h_max = 3
+        h_max = 4
 
         # Maximum number of direct children accepted by a root CH / CM relay.
         # Admission also requires a valid root path, depth, and physical link.
@@ -137,7 +137,7 @@ class Inputs:
         # join a feasible existing root for this many 1-s beacon periods before
         # participating in the local PCH election (SA degree, then mean L_ij).
         # An isolated eligible SA may become CH after the waiting period.
-        counter = 4
+        counter = 3
 
         # Number of 1-s ticks for short-lived previous-root preference after
         # disconnection.  This is a REPAIR priority, not root-switching
