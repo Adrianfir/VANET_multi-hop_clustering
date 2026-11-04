@@ -31,7 +31,7 @@ class Inputs:
         # ==================================================================
         # Select the traffic-density dataset; this is a file-selection option,
         # not an optimization weight or vehicle communication parameter.
-        data_density = 'largesize'
+        data_density = 'midsize'
         traffic_folder = (
             pathlib.Path(__file__).parent.parent.parent.absolute()
             / 'traffic_data'
@@ -70,8 +70,8 @@ class Inputs:
         # macro cells provide trajectory features.  Macro-zone transitions
         # also trigger reversion of memberless ordinary CHs to SA.
         alpha_micro = 0.1
-        alpha_meso = 0.5
-        alpha_macro = 1
+        alpha_meso = 0.4
+        alpha_macro = 0.8
 
         # Transmission ranges in metres.  A physical parent-child link (i,j)
         # is feasible only if its distance <= min(TR_i, TR_j), per Eq. (comm).
