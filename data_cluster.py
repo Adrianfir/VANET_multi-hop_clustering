@@ -101,6 +101,8 @@ class DataTable:
         self.stand_alone = set()
         self.all_chs = set()
         self.left_veh = dict()
+        # Preserve every departure episode if SUMO reuses a vehicle ID later.
+        self.left_veh_archive = []
         self.left_bus = dict()
         self.time = config.start_time
         self._sumo_timesteps = config.sumo_trace.documentElement.getElementsByTagName('timestep')
@@ -111,6 +113,7 @@ class DataTable:
         self.edge_color = ''
         self.sumo_edges, self.sumo_nodes = util.sumo_net_info(config.sumo_edge, config.sumo_node)
         self.ch_net = None
+        self.net_graph = nx.Graph()  # also valid when the initial FCD tick is empty
 
         self.tvct_history = []  # stores TVCT(t) at each tick
         self.avg_tvct_history = []  # stores running average up to each tick
@@ -175,8 +178,10 @@ class DataTable:
                                                                    )
                                         )
 
-        # Initial SUMO timestep is an observed tick, too. Ordinary vehicles
-        # start as SAs, so this makes their presence denominator exact.
+        # The initial SUMO tick is observed. In DHCV, formation precedes the
+        # first stability sample; otherwise a fictitious SA episode is added.
+        if getattr(config, 'algorithm', 'MMZCA').upper() == 'DHCV':
+            self._dhcv_form_initial(config)
         self.record_mmzca_stability()
 
     @staticmethod
@@ -368,6 +373,7 @@ class DataTable:
             self.zone_vehicles[self.veh_table.values(k)['macro_zone']].discard(k)
             self.veh_table.values(k)['depart_time'] = self.time - 1
             self.left_veh[k] = self.veh_table.values(k)
+            self.left_veh_archive.append((k, self.left_veh[k]))
 
             self.veh_table.remove(k)
             self.net_graph.remove_node(k)
@@ -773,6 +779,8 @@ class DataTable:
         return switches
 
     def update_cluster(self, veh_ids, config):
+        if getattr(config, 'algorithm', 'MMZCA').upper() == 'DHCV':
+            return self._dhcv_update_cluster(config)
         """Maintain root-connected MMZCA trees; then join unresolved SAs.
 
         Every CH/CM edge is evaluated against its IMMEDIATE parent, not the
@@ -861,6 +869,180 @@ class DataTable:
         self._mmzca_sync_direct_children()
         for veh_id in list(self.stand_alone):
             self._mmzca_join_sa(veh_id, config)
+
+    # ----------------------------------------------------------------------
+    # DHCV clustering logic. The original DataTable update(), MMZCA methods,
+    # stability metrics, TVCT logic and vehicle/zone tables remain in place.
+    # ----------------------------------------------------------------------
+
+    def _dhcv_beacons(self, config):
+        """Collect local one-hop WAVE-equivalent information at the current tick."""
+        if self.bus_table.ids():
+            raise ValueError('DHCV paper does not define privileged bus CHs. '
+                             'Use sumoTrace_no_bus_and_rsu.xml for this baseline.')
+        active = {i for i in self.veh_table.ids()
+                  if self.veh_table.values(i).get('in_area', False)}
+        physical, graph, chains, rankings, diagnostics = util.dhcv_beacon_snapshot(
+            self.veh_table, self.zone_vehicles, active, config,
+            zones_obj=self.macro_zones)
+        self.dhcv_physical_graph = physical
+        self.dhcv_admissible_graph = graph
+        self.dhcv_ranks = rankings
+        self.dhcv_chains = chains
+        self.dhcv_beacon_stats = diagnostics
+        for i in active:
+            st = self.veh_table.values(i)
+            st['dhcv_cnn'] = list(chains[i])
+            st['dhcv_pch'] = list(rankings[i])
+            st['dhcv_degree'] = len(physical[i])
+        return active, graph, rankings
+
+    def _dhcv_form_initial(self, config):
+        """DHCV Initialization and RelativeMax, before the initial metric tick."""
+        active, graph, rankings = self._dhcv_beacons(config)
+        plan = uhelp.dhcv_form_forest(active, graph, rankings,
+                                      self.veh_table, int(config.dhcv_d), self.dhcv_chains)
+        uhelp.dhcv_validate_forest(plan, self.dhcv_physical_graph,
+                                    int(config.dhcv_d))
+        uhelp.dhcv_commit_forest(self, plan, config, event_reason='dhcv_initial')
+        self.dhcv_last_renew = self.time
+        self.dhcv_vi_recoveries = 0
+        self.dhcv_renewals = 1
+
+    def _dhcv_update_cluster(self, config):
+        """DHCV RI renewal and VI link verification (instead of MMZCA rules).
+
+        Every tick verifies physical parent connectivity. A temporarily lost
+        link is allowed to survive the paper's VI grace period, but such a
+        link is marked invalid and cannot serve new child attachments. At the
+        expiration only disconnected branches are re-elected. Whole-network
+        CH renewal occurs once per RI, not every one-second SUMO tick.
+        """
+        active, graph, rankings = self._dhcv_beacons(config)
+        D = int(config.dhcv_d)
+        if D < 1 or int(config.dhcv_ri) < 1 or int(config.dhcv_vi) < 1:
+            raise ValueError('DHCV D, RI, and VI must be positive integers')
+        if self.time - getattr(self, 'dhcv_last_renew', self.time) >= int(config.dhcv_ri):
+            plan = uhelp.dhcv_form_forest(active, graph, rankings,
+                                          self.veh_table, D, self.dhcv_chains)
+            uhelp.dhcv_validate_forest(plan, self.dhcv_physical_graph, D)
+            uhelp.dhcv_commit_forest(self, plan, config, event_reason='dhcv_renew')
+            for i in active:
+                self.veh_table.values(i)['dhcv_lost_ticks'] = 0
+            self.dhcv_last_renew = self.time
+            self.dhcv_renewals = getattr(self, 'dhcv_renewals', 0) + 1
+            return
+
+        # Build from existing parent pointers; do NOT unnecessarily re-elect
+        # connected CMs between renewal instants.
+        plan = {}
+        grace, expired = set(), set()
+        for i in sorted(active, key=lambda j: (
+                int(self.veh_table.values(j).get('hop_count') or 0), str(j))):
+            st = self.veh_table.values(i)
+            if st.get('cluster_head') is True:
+                plan[i] = (i, None, 0)
+                st['dhcv_lost_ticks'] = 0
+                continue
+            root = st.get('root_ch') or st.get('primary_ch')
+            parent = st.get('parent_node') or st.get('parent_id') or st.get('secondary_ch') or root
+            if root is None or parent is None:
+                st['dhcv_lost_ticks'] = 0
+                continue
+            depth = st.get('hop_count')
+            parent_plan = plan.get(parent)
+            # A departed root or parent has no VI grace: the branch must
+            # not point to a node that no longer exists.
+            missing = parent not in active or root not in active
+            linked = parent in self.dhcv_physical_graph.get(i, ())
+            parent_usable = (parent_plan is not None and parent_plan[0] == root
+                             and parent_plan[2] + 1 == depth
+                             and depth is not None and depth <= D
+                             and parent not in expired)
+            if not parent_usable and parent not in plan:
+                missing = True
+            if not missing and parent_usable and linked and parent not in grace:
+                st['dhcv_lost_ticks'] = 0
+                plan[i] = (root, parent, depth)
+            elif missing or (not parent_usable):
+                expired.add(i)
+                st['dhcv_lost_ticks'] = 0
+            else:
+                lost = int(st.get('dhcv_lost_ticks', 0)) + 1
+                st['dhcv_lost_ticks'] = lost
+                if lost >= int(config.dhcv_vi):
+                    expired.add(i)
+                else:
+                    grace.add(i)
+                    plan[i] = (root, parent, depth)
+        # If an ancestor expired, all dependent descendants must reattach.
+        changed = True
+        while changed:
+            changed = False
+            for i in tuple(plan):
+                p = plan[i][1]
+                if p is not None and p not in plan:
+                    expired.add(i)
+                    plan.pop(i)
+                    grace.discard(i)
+                    changed = True
+
+        # Reuse existing root-connected trees; only unresolved vehicles and
+        # failed branches seek the next PCH or CNN1 root/parent (paper repair).
+        pending = active - set(plan)
+        if pending:
+            plan, pending = uhelp.dhcv_attach_to_existing(
+                plan, graph, pending, rankings, D,
+                eligible_parents=set(plan) - grace,
+                cnn_chains=self.dhcv_chains)
+            if pending:
+                # When no known CH can be reached without crossing clusters,
+                # rebuild ONLY the remaining local component(s).
+                new = uhelp.dhcv_form_forest(pending, graph, rankings,
+                                              self.veh_table, D, self.dhcv_chains)
+                # The partial-election routine must only allocate nodes that
+                # were still unresolved. Never replace a valid retained CM/CH
+                # (and consequently orphan its existing descendant branch).
+                unexpected = set(new) - pending
+                if unexpected:
+                    raise AssertionError(
+                        'DHCV partial repair attempted to overwrite retained nodes: '
+                        + repr(sorted(unexpected)))
+                plan.update(new)
+                self.dhcv_vi_recoveries = getattr(self, 'dhcv_vi_recoveries', 0) + 1
+
+        # DHCV Exception 3: childless CH may become a CM of an available
+        # neighbor's root, but only if there is a complete valid D-hop path.
+        children = {i: 0 for i in plan}
+        for i, (_, p, _) in plan.items():
+            if p is not None:
+                children[p] += 1
+        for ch_id, (root, parent, _) in list(plan.items()):
+            if parent is not None or children[ch_id] or ch_id in grace:
+                continue
+            proposals = []
+            cnn = self.dhcv_chains.get(ch_id, ())
+            for j in cnn[1:2]:
+                if j not in graph.get(ch_id, ()) or j in grace or j not in plan:
+                    continue
+                other_root, _, depth = plan[j]
+                if other_root == ch_id or depth + 1 > D:
+                    continue
+                proposals.append((depth + 1, str(other_root), str(j), j, other_root))
+            if proposals:
+                depth, _, _, j, other_root = min(proposals)
+                plan[ch_id] = (other_root, j, depth)
+                children[j] += 1
+            else:
+                # DHCV Exception 3: a CH without any CM is not automatically
+                # retained as an isolated one-node cluster. In the project's
+                # CH/CM/SA framework it remains SA until an admissible PCH
+                # becomes reachable. This affects no other cluster member.
+                plan.pop(ch_id)
+
+        uhelp.dhcv_validate_forest(plan, self.dhcv_physical_graph, D, grace)
+        uhelp.dhcv_commit_forest(self, plan, config,
+                                event_reason='dhcv_maintenance', grace=grace)
 
     def multi_hop(self, veh_id, config, bus_candidates,
                   ch_candidates, sub_ch_candidates, other_vehs):
@@ -1014,6 +1196,8 @@ class DataTable:
         return None if link is None else link['L']
 
     def stand_alones_cluster(self, configs):
+        if getattr(configs, 'algorithm', 'MMZCA').upper() == 'DHCV':
+            return  # DHCV's PCH election belongs to _dhcv_update_cluster().
         """Wait lambda, locally elect PCHs, then join the newly formed CHs.
 
         SA neighbors are prospective CH-election peers, NOT eligible relay
@@ -1104,6 +1288,8 @@ class DataTable:
             uhelp.sync_node_cluster_fields(veh_id, self.veh_table, self.bus_table)
 
     def update_kernels(self, config):
+        if getattr(config, 'algorithm', 'MMZCA').upper() == 'DHCV':
+            return  # DHCV does not use MMZCA micro-zone kernels.
         """Advance MMZCA sparse micro-zone reports and sketch dissemination.
 
         Call once per tick AFTER update_cluster() and stand_alones_cluster().
@@ -1272,12 +1458,12 @@ class DataTable:
         the existing clustering logic and vcsm_legacy() comparison.
         """
         vehicles = [(vid, self.veh_table.values(vid)) for vid in self.veh_table.ids()]
-        vehicles += list(self.left_veh.items())
+        vehicles += list(getattr(self, 'left_veh_archive', self.left_veh.items()))
 
         # Prevent a partially updated current tick from producing a plausible
         # but incorrect metric.
         for vid, st in vehicles:
-            if vid in self.veh_table.ids() and st.get('stability_last_tick') != self.time:
+            if self.veh_table.values(vid) is st and st.get('stability_last_tick') != self.time:
                 raise RuntimeError(
                     'Call record_mmzca_stability() after clustering every tick '
                     'before evaluating MMZCA stability metrics'

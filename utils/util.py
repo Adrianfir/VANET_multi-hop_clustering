@@ -18,6 +18,7 @@ __all__ = [
 
 import numpy as np
 import random
+import math
 import haversine as hs
 from linked_list import LinkedList
 from scipy import spatial
@@ -2231,3 +2232,173 @@ def choose_mmzca_parent(veh_id, veh_table, bus_table,
     score = feasible[chosen][key]
     details = dict(feasible[chosen], selection_mode=mode, all_candidates=feasible)
     return (chosen, score, details) if return_details else (chosen, score)
+
+# ---------------------------------------------------------------------------
+# DHCV (Azizian et al., WCNC 2016): local beacon/mobility processing.
+# Existing MMZCA helpers above are deliberately left unchanged.
+# ---------------------------------------------------------------------------
+
+def dhcv_one_hop_graph(veh_table, zone_vehicles, active_ids, zones_obj=None):
+    """Reciprocal physical one-hop graph using the project's macro-zone index.
+
+    All prospective links are finally checked by the existing det_dist().
+    This is a simulation of received neighbor beacons, not an all-pairs oracle.
+    """
+    active_ids = set(active_ids)
+    graph = {i: set() for i in active_ids}
+    if not active_ids:
+        return graph
+    if zones_obj is not None:
+        area = zones_obj.area
+        meters_per_lat_cell = (111194.9 * (area['max_lat']-area['min_lat']) /
+                               max(1, zones_obj.n_rows))
+        meters_per_lon_cell = (111194.9 *
+            math.cos(math.radians(max(abs(area['min_lat']), abs(area['max_lat'])))) *
+            (area['max_long'] - area['min_long']) / max(1, zones_obj.n_cols))
+        min_cell = min(meters_per_lat_cell, meters_per_lon_cell)
+        largest_range = max(float(veh_table.values(i)['trans_range']) for i in active_ids)
+        zone_radius = max(1, int(math.floor(largest_range/max(min_cell, 1.)))+1)
+    for i in sorted(active_ids):
+        src = veh_table.values(i)
+        if zones_obj is None:
+            zones_to_scan = src['neighbor_zones']
+        else:
+            zone = src['macro_zone']
+            ix = int(zone.split('zone')[-1])
+            row, col = divmod(ix, zones_obj.n_cols)
+            zones_to_scan = (
+                zones_obj.zoning_mode + '_zone' + str(r*zones_obj.n_cols+c)
+                for r in range(max(0,row-zone_radius), min(zones_obj.n_rows,row+zone_radius+1))
+                for c in range(max(0,col-zone_radius), min(zones_obj.n_cols,col+zone_radius+1)))
+        for zone in zones_to_scan:
+            for j in zone_vehicles.get(zone, ()):
+                if j <= i or j not in active_ids:
+                    continue
+                dst = veh_table.values(j)
+                if dst is not None and det_dist(i, veh_table, j, veh_table) <= min(
+                        float(src['trans_range']), float(dst['trans_range'])):
+                    graph[i].add(j)
+                    graph[j].add(i)
+    return graph
+
+
+def dhcv_heading_delta(angle_a, angle_b):
+    return abs((float(angle_a) - float(angle_b) + 180.0) % 360.0 - 180.0)
+
+
+def dhcv_relative_mobility(i, j, veh_table, config):
+    """DHCV Eqs. (1)-(7): normalized distance and projected speed mismatch.
+
+    Returns None if the two vehicles do not move in an admissible direction.
+    All units are explicitly set by config; SUMO speed is in m/s.
+    """
+    a, b = veh_table.values(i), veh_table.values(j)
+    theta = dhcv_heading_delta(a['angle'], b['angle'])
+    if theta >= float(config.dhcv_direction_tolerance_deg):
+        return None
+    tr = min(float(a['trans_range']), float(b['trans_range']))
+    lsr = float(config.dhcv_lsr_mps)
+    if tr <= 0.0 or lsr <= 0.0:
+        raise ValueError('DHCV needs a positive transmission range and legal speed range')
+    d = det_dist(i, veh_table, j, veh_table)
+    projected_delta = abs((float(a['speed']) - float(b['speed'])) *
+                          math.cos(math.radians(theta)))
+    return (float(config.dhcv_alpha) * d / tr +
+            float(config.dhcv_beta) * projected_delta / lsr)
+
+
+def dhcv_threshold(i, veh_table, physical_graph, config):
+    """Threshold for the paper's minimum-relative-mobility CNN search.
+
+    The article prints (mean speed + k*std)/1000, but does not document the
+    units that reconcile this with its normalized, dimensionless RM metric.
+    For SUMO's m/s speeds, the unit-consistent option normalizes speed
+    statistics by the *same* LSR used for RM's speed component (Eq. 6).
+    The literal published /1000 expression is selectable for sensitivity
+    analysis and must not be claimed equivalent to the normalized variant.
+    """
+    speeds = [float(veh_table.values(j)['speed'])
+              for j in physical_graph.get(i, ())]
+    if not speeds:
+        return -1.0
+    avg = sum(speeds) / len(speeds)
+    sd = math.sqrt(sum((v - avg) ** 2 for v in speeds) / len(speeds))
+    numerator = avg + float(config.dhcv_k) * sd
+    mode = getattr(config, 'dhcv_threshold_mode', 'normalized')
+    if mode == 'literal':
+        return numerator / 1000.0
+    if mode == 'normalized':
+        lsr = float(config.dhcv_lsr_mps)
+        if lsr <= 0:
+            raise ValueError('DHCV LSR must be positive')
+        return numerator / lsr
+    raise ValueError('Unknown DHCV threshold mode: ' + str(mode))
+
+
+def dhcv_relative_max(i, veh_table, physical_graph, config, threshold_cache=None,
+                      rm_cache=None):
+    """Return CNN_0..CNN_D and decreasing-priority PCH candidates.
+
+    At each hop choose the one-hop neighbor with the least admissible RM;
+    do not loop back onto a previously selected CNN. Candidate CH is the CNN
+    with maximum *physical* one-hop degree; lower speed breaks degree ties.
+    """
+    path = [i]
+    used = {i}
+    for _ in range(int(config.dhcv_d)):
+        node = path[-1]
+        limit = (threshold_cache[node] if threshold_cache is not None else
+                 dhcv_threshold(node, veh_table, physical_graph, config))
+        candidates = []
+        for j in physical_graph.get(node, ()):
+            if j in used:
+                continue
+            key = tuple(sorted((node, j)))
+            if rm_cache is not None and key in rm_cache:
+                rm = rm_cache[key]
+            else:
+                rm = dhcv_relative_mobility(node, j, veh_table, config)
+                if rm_cache is not None:
+                    rm_cache[key] = rm
+            if rm is not None and rm < limit:
+                candidates.append((rm, str(j), j))
+        if not candidates:
+            break
+        selected = min(candidates)[2]
+        used.add(selected)
+        path.append(selected)
+    ranked = sorted(path, key=lambda j: (
+        -len(physical_graph.get(j, ())), float(veh_table.values(j)['speed']),
+        0 if veh_table.values(j).get('cluster_head') else 1, str(j)))
+    return path, ranked
+
+
+def dhcv_beacon_snapshot(veh_table, zone_vehicles, active_ids, config, zones_obj=None):
+    """One tick's physical graph, admissible links and per-node CNN/PCH arrays."""
+    physical = dhcv_one_hop_graph(veh_table, zone_vehicles, active_ids, zones_obj)
+    thresholds = {i: dhcv_threshold(i, veh_table, physical, config)
+                  for i in physical}
+    relative = {}
+    eligible = {i: set() for i in physical}
+    admissible = 0
+    for i in physical:
+        for j in physical[i]:
+            if j <= i:
+                continue
+            rm = dhcv_relative_mobility(i, j, veh_table, config)
+            relative[(i, j)] = rm
+            if rm is not None and rm < max(thresholds[i], thresholds[j]):
+                eligible[i].add(j)
+                eligible[j].add(i)
+                admissible += 1
+    chains, ranks = {}, {}
+    for i in physical:
+        chains[i], ranks[i] = dhcv_relative_max(
+            i, veh_table, physical, config, thresholds, relative)
+    return physical, eligible, chains, ranks, {
+        'physical_edges': sum(map(len, physical.values())) // 2,
+        'admissible_edges': admissible,
+        'mean_threshold': (sum(thresholds.values()) / len(thresholds)) if thresholds else 0.0,
+        'fraction_with_cnn1': (sum(len(chains[i]) > 1 for i in chains) /
+                               len(chains)) if chains else 0.0,
+    }

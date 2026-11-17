@@ -1115,3 +1115,374 @@ def intra_cluster_switch_allowed(veh_id, new_cand_id, veh_table, bus_table):
         new_root = get_root(new_cand_id, veh_table, bus_table)
 
     return new_root == current_root
+
+
+# ---------------------------------------------------------------------------
+# DHCV forest construction/commit. Existing MMZCA functions remain untouched.
+# ---------------------------------------------------------------------------
+
+def dhcv_bfs(root, graph, allowed, depth_limit, cost=None):
+    """Rooted, cycle-free, <=D-hop tree over currently unassigned nodes."""
+    from collections import deque
+    allowed = set(allowed)
+    if root not in allowed:
+        return {}
+    discovered = {root: (root, None, 0)}
+    queue = deque([root])
+    while queue:
+        parent = queue.popleft()
+        depth = discovered[parent][2]
+        if depth >= depth_limit:
+            continue
+        neighbors = sorted((j for j in graph.get(parent, ()) if j in allowed
+                            and j not in discovered),
+                           key=lambda j: ((cost(parent, j) if cost else 0.0), str(j)))
+        for j in neighbors:
+            if j in discovered:
+                continue
+            discovered[j] = (root, parent, depth+1)
+            queue.append(j)
+    return discovered
+
+
+def dhcv_form_forest(active_ids, graph, pch_ranks, veh_table, depth_limit,
+                     cnn_chains=None):
+    """Resolve the paper's CNN/PCH nominations into non-overlapping D-hop trees.
+
+    Crucial: do NOT take a BFS over every available edge. DHCV selects a
+    *single* least-relative-mobility CNN neighbor at each hop. A BFS over all
+    edges can incorrectly absorb whole connected components into one CH and
+    produce unrealistically low CH counts and long CM residence.
+
+    A member follows its CNN_1 choice toward a nominated PCH, or, under
+    Exception 1, the CH of CNN_1 when the preferred path cannot be completed.
+    In the existing CH/CM/SA framework, an uncovered vehicle remains SA.
+    The article does not give a disconnected-singleton state convention.
+    """
+    active = set(active_ids)
+    if not active:
+        return {}
+    cnn_chains = (cnn_chains or {})
+    first = {i: (cnn_chains[i][1] if len(cnn_chains.get(i, ())) > 1 else None)
+             for i in active}
+    # A node with no admissible CNN_1 is not a valid forwarding parent in
+    # its own local RelativeMax search. All assignments still check 'graph'.
+    # During selective VI repair, `active` contains ONLY unresolved vehicles,
+    # while rankings/chains were computed over the whole physical network.
+    # A PCH nominated outside `active` may already be a CM with descendants
+    # in the retained forest. Promoting it to a new CH here would overwrite
+    # its existing root/parent and corrupt every dependent ancestor chain.
+    # Existing clusters are handled separately by dhcv_attach_to_existing().
+    nominators = {i: pch_ranks[i][0] for i in active
+                  if (first[i] is not None and pch_ranks.get(i)
+                      and pch_ranks[i][0] in active)}
+    nominated = set(nominators.values())
+    support = {root: sum(1 for i, r in nominators.items()
+                         if r == root and i != root) for root in nominated}
+    order = sorted(nominated, key=lambda i: (
+        -support[i], -len(graph.get(i, ())),
+        float(veh_table.values(i)['speed']), str(i)))
+    plan = {}
+    for root in order:
+        if root in plan:
+            continue
+        proposal = {root: (root, None, 0)}
+        # Reverse the directed, chosen CNN_1 links. All incoming nodes must
+        # independently nominate this root, rather than merely be D-hop
+        # reachable via an arbitrary graph path.
+        for _ in range(depth_limit):
+            added = []
+            for i in sorted(active - plan.keys() - proposal.keys()):
+                if nominators.get(i) != root:
+                    continue
+                parent = first[i]
+                if parent not in proposal or parent not in graph.get(i, ()):
+                    continue
+                depth = proposal[parent][2] + 1
+                if depth <= depth_limit:
+                    added.append((i, root, parent, depth))
+            if not added:
+                break
+            for i, r, parent, depth in added:
+                proposal[i] = (r, parent, depth)
+        # Exception 3: no member => no effective cluster in the existing
+        # framework. Avoid automatic singleton CH promotion.
+        if len(proposal) >= 2:
+            plan.update(proposal)
+
+    # Exception 1: failed PCH route may instead join CNN_1's root, provided
+    # the same selected one-hop link is physically valid and D is respected.
+    pending = active - plan.keys()
+    plan, pending = dhcv_attach_to_existing(
+        plan, graph, pending, pch_ranks, depth_limit,
+        cnn_chains=cnn_chains)
+
+    # A group of nodes can nominate a CH that is not yet committed but would
+    # gain members whose selected CNN chain points to it. Try again after
+    # earlier conflicts have resolved, without inventing BFS paths.
+    for root in order:
+        if root not in pending:
+            continue
+        proposal = {root: (root, None, 0)}
+        for _ in range(depth_limit):
+            added = []
+            for i in sorted(pending - proposal.keys()):
+                if nominators.get(i) != root:
+                    continue
+                parent = first[i]
+                if parent in proposal and parent in graph.get(i, ()):
+                    depth = proposal[parent][2] + 1
+                    if depth <= depth_limit:
+                        added.append((i, root, parent, depth))
+            if not added:
+                break
+            for i, r, parent, depth in added:
+                proposal[i] = (r, parent, depth)
+        if len(proposal) > 1:
+            plan.update(proposal)
+            pending.difference_update(proposal)
+            plan, pending = dhcv_attach_to_existing(
+                plan, graph, pending, pch_ranks, depth_limit,
+                cnn_chains=cnn_chains)
+
+    # Exception 3 (CNN_1 fallback): a nominated, childless CH can join its
+    # chosen CNN_1 instead of remaining a singleton. When that CNN_1 is
+    # unresolved, the endpoint becomes the new CH and recruits the initiator;
+    # no arbitrary graph-neighbor or network-wide root is introduced.
+    # This also handles asymmetric local thresholds (i chooses j, but j does
+    # not choose i) without fabricating all-node CH assignments.
+    for i in sorted(tuple(pending), key=lambda k: (
+            -len(graph.get(k, ())), float(veh_table.values(k)['speed']), str(k))):
+        if i not in pending:
+            continue
+        j = first.get(i)
+        if j not in pending or j not in graph.get(i, ()) or j == i:
+            continue
+        plan[j] = (j, None, 0)
+        plan[i] = (j, j, 1)
+        pending.discard(i)
+        pending.discard(j)
+        plan, pending = dhcv_attach_to_existing(
+            plan, graph, pending, pch_ranks, depth_limit,
+            cnn_chains=cnn_chains)
+
+    # Exception 2: CH which is also CM elsewhere may join another CH only if
+    # its *whole* branch can move within D, and only through its CNN_1 link.
+    for head in sorted(tuple(plan)):
+        if plan[head][1] is not None:
+            continue
+        nominees = pch_ranks.get(head, ())
+        neighbor = first.get(head)
+        if not nominees or nominees[0] == head or neighbor not in plan:
+            continue
+        other_root, _, other_depth = plan[neighbor]
+        if other_root == head or neighbor not in graph.get(head, ()):
+            continue
+        subtree = {i for i, (root, _, _) in plan.items() if root == head}
+        tail_depth = max(plan[i][2] for i in subtree)
+        if other_depth + 1 + tail_depth > depth_limit:
+            continue
+        for i in subtree:
+            _, old_parent, old_depth = plan[i]
+            plan[i] = (other_root,
+                       neighbor if i == head else old_parent,
+                       other_depth + 1 + old_depth)
+    # Defensive contract: a local forest formation must never take ownership
+    # of a retained vehicle outside the explicitly supplied recovery set.
+    unexpected = set(plan).difference(active)
+    if unexpected:
+        raise AssertionError('DHCV local formation captured external nodes: '
+                             + repr(sorted(unexpected)))
+    return plan
+
+
+def dhcv_attach_to_existing(plan, graph, available, pch_ranks, depth_limit,
+                            eligible_parents=None, cnn_chains=None):
+    """Repair or initial fallback using the node's selected CNN_1 hop.
+
+    This is intentionally NOT a greedy search over all graph neighbors.
+    Otherwise almost every vehicle can be attached under a distant CH that
+    it never selected, which destroys the published DHCV decision rule.
+    """
+    pending = set(available)
+    if not pending:
+        return plan, pending
+    safe = set(plan) if eligible_parents is None else set(eligible_parents)
+    cnn_chains = cnn_chains or {}
+    for _ in range(depth_limit):
+        best = []
+        for i in pending:
+            path = cnn_chains.get(i, ())
+            if len(path) < 2:
+                continue
+            j = path[1]
+            if j not in safe or j not in graph.get(i, ()):
+                continue
+            root, _, depth = plan[j]
+            if depth + 1 > depth_limit:
+                continue
+            preferred = pch_ranks.get(i, ())
+            key = (preferred.index(root) if root in preferred else len(preferred),
+                   depth + 1, str(root), str(i))
+            best.append((key, i, j, root, depth + 1))
+        if not best:
+            break
+        # Single synchronous round of local assertions; newly connected
+        # parents only become eligible on the next iteration of this loop.
+        attachments = sorted(best)
+        for _, i, j, root, depth in attachments:
+            if i not in pending or j not in safe:
+                continue
+            plan[i] = (root, j, depth)
+            pending.discard(i)
+            safe.add(i)
+    return plan, pending
+
+
+def dhcv_validate_forest(plan, physical, D, allow_grace=()):
+    """Strong connected-tree invariants for every non-grace assignment."""
+    grace = set(allow_grace)
+    for node, (root, parent, depth) in plan.items():
+        if depth > D or depth < 0:
+            raise AssertionError('DHCV hop limit violated: ' + str(node))
+        if parent is None:
+            if node != root or depth != 0:
+                raise AssertionError('Non-root DHCV singleton: ' + str(node))
+            continue
+        if node not in grace and parent not in physical.get(node, ()):
+            raise AssertionError('DHCV nonphysical parent link: ' + str(node))
+        if parent not in plan:
+            raise AssertionError('DHCV missing parent: ' + str(node))
+        proot, _, pd = plan[parent]
+        if proot != root or pd + 1 != depth:
+            raise AssertionError(
+                'DHCV inconsistent root/ancestor: node=' + str(node) +
+                ' assignment=' + repr((root, parent, depth)) +
+                ' parent_assignment=' + repr(plan[parent]))
+    return True
+
+
+def dhcv_commit_forest(cluster, plan, config, *, event_reason='dhcv_renew', grace=()):
+    """Atomic role, root, parent and zone-index commit on EXISTING vehicle records.
+
+    Critically this does not replace DataTable, HashTable, SUMO update, or the
+    shared root-based stability metric. All membership sets are reconstructed
+    from the authoritative parent pointers. A renewed CM of the same root
+    remains in the same residence episode, even if its relay parent changes.
+    """
+    grace = set(grace)
+    ids = cluster.veh_table.ids()
+    children = {i: set() for i in ids}
+    for i, (root, parent, depth) in plan.items():
+        if parent is not None:
+            children[parent].add(i)
+    root_direct = {i: set() for i in ids}
+    root_indirect = {i: set() for i in ids}
+    for i, (root, parent, depth) in plan.items():
+        if parent is None:
+            continue
+        if depth == 1:
+            root_direct[root].add(i)
+        else:
+            root_indirect[root].add(i)
+    previous = {i: cluster._tvct_state(i) for i in ids}
+    count_ch_to_cm = 0
+    for i in sorted(ids):
+        st = cluster.veh_table.values(i)
+        old_role, old_root = previous[i]
+        new = plan.get(i)
+        role = ('SA' if new is None else 'CH' if new[1] is None else 'MEM')
+        root = None if new is None else new[0]
+        parent = None if new is None else new[1]
+        depth = None if new is None else new[2]
+        if old_role == 'CH' and role == 'MEM':
+            count_ch_to_cm += 1
+
+        # Preserve the existing linked-list episode *format* used elsewhere in
+        # the project, not just the newer stability_episodes metric.
+        record = st.get('cluster_record')
+        if record is not None and getattr(record, 'tail', None) is not None:
+            current_tail = record.tail
+            value = current_tail.value
+            same_cm = (role == 'MEM' and old_role == 'MEM' and
+                       old_root == root and current_tail.key == root and
+                       value.get('is_ch') is False and value.get('timer') is not None)
+            if same_cm:
+                if value.get('start_time') is not None and (
+                        value['start_time'] + value['timer'] - 1 < cluster.time):
+                    value['timer'] += 1
+                parent_list = value.setdefault('secondary_ch', [])
+                relay = None if parent == root else parent
+                if not parent_list or parent_list[-1] != relay:
+                    parent_list.append(relay)
+            elif role == 'MEM' and (old_role != role or old_root != root):
+                new_value = {'is_ch': False, 'secondary_ch': [None if parent == root else parent],
+                             'start_time': cluster.time, 'ef': None, 'timer': 1,
+                             'interrupt': []}
+                if current_tail.key is None and value.get('timer') is None and (
+                        value.get('start_time') is None and not value.get('is_ch')):
+                    current_tail.key = root
+                    current_tail.value = new_value
+                else:
+                    record.append(root, new_value)
+            elif role == 'CH' and old_role != 'CH':
+                if (current_tail.key is None and value.get('timer') is None and
+                        value.get('start_time') is None and not value.get('is_ch')):
+                    value['is_ch'] = True
+                else:
+                    record.append(None, {'is_ch': True, 'secondary_ch': [],
+                                         'start_time': None, 'ef': None,
+                                         'timer': None, 'interrupt': []})
+            elif role == 'SA' and old_role != 'SA':
+                record.append(None, {'is_ch': False, 'secondary_ch': [],
+                                     'start_time': None, 'ef': None,
+                                     'timer': None, 'interrupt': []})
+
+        st['cluster_head'] = role == 'CH'
+        st['primary_ch'] = root if role == 'MEM' else None
+        st['secondary_ch'] = parent if role == 'MEM' and parent != root else None
+        st['root_ch'] = root
+        st['parent_node'] = parent
+        st['parent_id'] = parent
+        st['hop_count'] = depth
+        st['role'] = ('CH' if role == 'CH' else
+                      ('RN' if children[i] else 'CM') if role == 'MEM' else 'SA')
+        st['root_connection_valid'] = role == 'CH' or (role == 'MEM' and i not in grace)
+        st['direct_children'] = children[i]
+        st['cluster_members'] = root_direct[i] if role == 'CH' else set()
+        st['sub_cluster_members'] = (root_indirect[i] if role == 'CH'
+                                     else set(children[i]))
+        st['gates'] = {}
+        st['gate_chs'] = set()
+        st['path_bottleneck'] = None if role != 'CH' else 0.0
+        st['committed_link_score'] = None
+        st['current_root_cost'] = None
+        st['current_parent_cost'] = None
+        if role == 'CH' and old_role != 'CH':
+            st['start_ch_zone'] = st['macro_zone']
+        elif role != 'CH':
+            st['start_ch_zone'] = None
+        if role == 'MEM' and root != old_root:
+            st['priority_ch'] = root
+            st['priority_counter'] = getattr(config, 'priority_counter', 0)
+        elif role == 'CH':
+            st['priority_ch'] = None
+        if role != old_role or root != old_root:
+            st['counter'] = getattr(config, 'counter', 0)
+
+    cluster.dhcv_ch_to_cm_changes = getattr(cluster, 'dhcv_ch_to_cm_changes', 0) + count_ch_to_cm
+    cluster.all_chs = {i for i,(r,p,d) in plan.items() if p is None} | cluster.bus_table.ids()
+    cluster.stand_alone = ids - set(plan)
+    for zone in cluster.zone_ch:
+        cluster.zone_ch[zone].clear()
+        cluster.zone_stand_alone[zone].clear()
+    for i in ids:
+        st = cluster.veh_table.values(i)
+        z = st['macro_zone']
+        if st['cluster_head']:
+            cluster.zone_ch[z].add(i)
+        elif i in cluster.stand_alone:
+            cluster.zone_stand_alone[z].add(i)
+    for i in cluster.bus_table.ids():
+        cluster.zone_ch[cluster.bus_table.values(i)['macro_zone']].add(i)
+    cluster._mmzca_log_tvct_transitions(previous, event_reason)
