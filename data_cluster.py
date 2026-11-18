@@ -895,13 +895,18 @@ class DataTable:
             st['dhcv_cnn'] = list(chains[i])
             st['dhcv_pch'] = list(rankings[i])
             st['dhcv_degree'] = len(physical[i])
-        return active, graph, rankings
+        # A selected CNN hop is always physical, but a *parent* link in the
+        # originator's CNN chain need not meet the originator's own threshold.
+        # Thresholds are used only to CHOOSE CNNs, not to invalidate paths
+        # afterward. The physical graph is therefore the commit validator.
+        return active, physical, rankings
 
     def _dhcv_form_initial(self, config):
         """DHCV Initialization and RelativeMax, before the initial metric tick."""
         active, graph, rankings = self._dhcv_beacons(config)
         plan = uhelp.dhcv_form_forest(active, graph, rankings,
-                                      self.veh_table, int(config.dhcv_d), self.dhcv_chains)
+                                      self.veh_table, int(config.dhcv_d), self.dhcv_chains,
+                                      isolated_policy=getattr(config, 'dhcv_isolated_policy', 'sa'))
         uhelp.dhcv_validate_forest(plan, self.dhcv_physical_graph,
                                     int(config.dhcv_d))
         uhelp.dhcv_commit_forest(self, plan, config, event_reason='dhcv_initial')
@@ -924,7 +929,8 @@ class DataTable:
             raise ValueError('DHCV D, RI, and VI must be positive integers')
         if self.time - getattr(self, 'dhcv_last_renew', self.time) >= int(config.dhcv_ri):
             plan = uhelp.dhcv_form_forest(active, graph, rankings,
-                                          self.veh_table, D, self.dhcv_chains)
+                                          self.veh_table, D, self.dhcv_chains,
+                                          isolated_policy=getattr(config, 'dhcv_isolated_policy', 'sa'))
             uhelp.dhcv_validate_forest(plan, self.dhcv_physical_graph, D)
             uhelp.dhcv_commit_forest(self, plan, config, event_reason='dhcv_renew')
             for i in active:
@@ -964,6 +970,13 @@ class DataTable:
             if not missing and parent_usable and linked and parent not in grace:
                 st['dhcv_lost_ticks'] = 0
                 plan[i] = (root, parent, depth)
+            elif not missing and parent_usable and parent in grace:
+                # The descendant's physical edge is intact, but its upstream
+                # route is under VI verification. Keep the whole branch in
+                # the same grace state instead of detaching it prematurely.
+                grace.add(i)
+                st['dhcv_lost_ticks'] = int(self.veh_table.values(parent).get('dhcv_lost_ticks', 0))
+                plan[i] = (root, parent, depth)
             elif missing or (not parent_usable):
                 expired.add(i)
                 st['dhcv_lost_ticks'] = 0
@@ -987,58 +1000,42 @@ class DataTable:
                     grace.discard(i)
                     changed = True
 
-        # Reuse existing root-connected trees; only unresolved vehicles and
-        # failed branches seek the next PCH or CNN1 root/parent (paper repair).
+        # Keep every valid retained assignment immutable. For unresolved
+        # vehicles, try the original PCH path in order (including second PCH),
+        # then CNN1's CH; only then elect new local heads. No retained CM can
+        # be silently promoted to a CH during recovery (Exception 2).
         pending = active - set(plan)
         if pending:
-            plan, pending = uhelp.dhcv_attach_to_existing(
-                plan, graph, pending, rankings, D,
-                eligible_parents=set(plan) - grace,
-                cnn_chains=self.dhcv_chains)
-            if pending:
-                # When no known CH can be reached without crossing clusters,
-                # rebuild ONLY the remaining local component(s).
-                new = uhelp.dhcv_form_forest(pending, graph, rankings,
-                                              self.veh_table, D, self.dhcv_chains)
-                # The partial-election routine must only allocate nodes that
-                # were still unresolved. Never replace a valid retained CM/CH
-                # (and consequently orphan its existing descendant branch).
-                unexpected = set(new) - pending
-                if unexpected:
-                    raise AssertionError(
-                        'DHCV partial repair attempted to overwrite retained nodes: '
-                        + repr(sorted(unexpected)))
-                plan.update(new)
+            plan = uhelp.dhcv_form_forest(
+                pending, graph, rankings, self.veh_table, D,
+                self.dhcv_chains, retained_plan=plan,
+                forbidden_parents=grace,
+                isolated_policy=getattr(config, 'dhcv_isolated_policy', 'sa'))
+            # Count actual VI-expired topology recoveries, not the routine
+            # per-tick recheck of vehicles that are still stand-alone.
+            if expired:
                 self.dhcv_vi_recoveries = getattr(self, 'dhcv_vi_recoveries', 0) + 1
 
-        # DHCV Exception 3: childless CH may become a CM of an available
-        # neighbor's root, but only if there is a complete valid D-hop path.
+        # Exception 3 during maintenance: a surviving CH whose last CM left
+        # must attempt CNN1's established cluster before remaining SA. Do not
+        # turn a disconnected singleton into an immortal empty CH.
         children = {i: 0 for i in plan}
-        for i, (_, p, _) in plan.items():
-            if p is not None:
-                children[p] += 1
-        for ch_id, (root, parent, _) in list(plan.items()):
-            if parent is not None or children[ch_id] or ch_id in grace:
+        for _, parent, _ in plan.values():
+            if parent is not None:
+                children[parent] += 1
+        for head in sorted(tuple(plan)):
+            if plan[head][1] is not None or children[head] or head in grace:
                 continue
-            proposals = []
-            cnn = self.dhcv_chains.get(ch_id, ())
-            for j in cnn[1:2]:
-                if j not in graph.get(ch_id, ()) or j in grace or j not in plan:
+            chain = self.dhcv_chains.get(head, (head,))
+            j = chain[1] if len(chain) > 1 else None
+            if j in plan and j not in grace and j in graph.get(head, ()):
+                root, _, d = plan[j]
+                if root != head and d + 1 <= D:
+                    plan[head] = (root, j, d + 1)
+                    children[j] += 1
                     continue
-                other_root, _, depth = plan[j]
-                if other_root == ch_id or depth + 1 > D:
-                    continue
-                proposals.append((depth + 1, str(other_root), str(j), j, other_root))
-            if proposals:
-                depth, _, _, j, other_root = min(proposals)
-                plan[ch_id] = (other_root, j, depth)
-                children[j] += 1
-            else:
-                # DHCV Exception 3: a CH without any CM is not automatically
-                # retained as an isolated one-node cluster. In the project's
-                # CH/CM/SA framework it remains SA until an admissible PCH
-                # becomes reachable. This affects no other cluster member.
-                plan.pop(ch_id)
+            if getattr(config, 'dhcv_isolated_policy', 'sa') != 'paper_ch':
+                plan.pop(head)
 
         uhelp.dhcv_validate_forest(plan, self.dhcv_physical_graph, D, grace)
         uhelp.dhcv_commit_forest(self, plan, config,

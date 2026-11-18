@@ -2336,12 +2336,12 @@ def dhcv_threshold(i, veh_table, physical_graph, config):
 
 
 def dhcv_relative_max(i, veh_table, physical_graph, config, threshold_cache=None,
-                      rm_cache=None):
-    """Return CNN_0..CNN_D and decreasing-priority PCH candidates.
+                      rm_cache=None, return_history=False):
+    """Paper's CNN_0..CNN_D and PCH_0..PCH_D RelativeMax rounds.
 
-    At each hop choose the one-hop neighbor with the least admissible RM;
-    do not loop back onto a previously selected CNN. Candidate CH is the CNN
-    with maximum *physical* one-hop degree; lower speed breaks degree ties.
+    Each CNN hop minimizes *that hop's* relative mobility, while the
+    per-round PCH is the maximum-degree vehicle encountered so far;
+    lower speed breaks equal-degree ties (WCNC 2016, Section III).
     """
     path = [i]
     used = {i}
@@ -2364,12 +2364,23 @@ def dhcv_relative_max(i, veh_table, physical_graph, config, threshold_cache=None
                 candidates.append((rm, str(j), j))
         if not candidates:
             break
-        selected = min(candidates)[2]
-        used.add(selected)
-        path.append(selected)
-    ranked = sorted(path, key=lambda j: (
-        -len(physical_graph.get(j, ())), float(veh_table.values(j)['speed']),
-        0 if veh_table.values(j).get('cluster_head') else 1, str(j)))
+        chosen = min(candidates)[2]
+        used.add(chosen)
+        path.append(chosen)
+    def priority(j):
+        return (-len(physical_graph.get(j, ())),
+                float(veh_table.values(j)['speed']), str(j))
+    pch_history = [min(path[:n], key=priority) for n in range(1, len(path)+1)]
+    # The paper's PCH array contains a running election result at each hop,
+    # not every CNN visited. The secondary PCH must therefore be the previous
+    # distinct winner in PCH_i (reverse chronological priority), rather than
+    # simply the second-largest-degree CNN in the path.
+    ranked = []
+    for winner in reversed(pch_history):
+        if winner not in ranked:
+            ranked.append(winner)
+    if return_history:
+        return path, ranked, pch_history
     return path, ranked
 
 
@@ -2391,10 +2402,14 @@ def dhcv_beacon_snapshot(veh_table, zone_vehicles, active_ids, config, zones_obj
                 eligible[i].add(j)
                 eligible[j].add(i)
                 admissible += 1
-    chains, ranks = {}, {}
+    chains, ranks, pch_history = {}, {}, {}
     for i in physical:
-        chains[i], ranks[i] = dhcv_relative_max(
-            i, veh_table, physical, config, thresholds, relative)
+        chains[i], ranks[i], pch_history[i] = dhcv_relative_max(
+            i, veh_table, physical, config, thresholds, relative,
+            return_history=True)
+    # Store history per vehicle without changing the existing beacon signature.
+    for i in physical:
+        veh_table.values(i)['dhcv_pch_history'] = pch_history[i]
     return physical, eligible, chains, ranks, {
         'physical_edges': sum(map(len, physical.values())) // 2,
         'admissible_edges': admissible,

@@ -1146,196 +1146,289 @@ def dhcv_bfs(root, graph, allowed, depth_limit, cost=None):
 
 
 def dhcv_form_forest(active_ids, graph, pch_ranks, veh_table, depth_limit,
-                     cnn_chains=None):
-    """Resolve the paper's CNN/PCH nominations into non-overlapping D-hop trees.
+                     cnn_chains=None, retained_plan=None, forbidden_parents=(),
+                     isolated_policy='sa'):
+    """Resolve DHCV RelativeMax nominations into non-overlapping D-hop trees.
 
-    Crucial: do NOT take a BFS over every available edge. DHCV selects a
-    *single* least-relative-mobility CNN neighbor at each hop. A BFS over all
-    edges can incorrectly absorb whole connected components into one CH and
-    produce unrealistically low CH counts and long CM residence.
+    An originating vehicle's CNN chain is the *path proposal*, even when an
+    intermediate CNN independently nominated another head. The earlier
+    implementation incorrectly required every intermediate to nominate the
+    same root. This function implements the ordered PCH fallbacks (Exception 1)
+    and existing CNN1's root fallback without BFS over arbitrary network links.
 
-    A member follows its CNN_1 choice toward a nominated PCH, or, under
-    Exception 1, the CH of CNN_1 when the preferred path cannot be completed.
-    In the existing CH/CM/SA framework, an uncovered vehicle remains SA.
-    The article does not give a disconnected-singleton state convention.
+    `retained_plan` is used exclusively at VI recovery. Existing assignments
+    are immutable; neither a new CH election nor a path installation may
+    overwrite one of them. `forbidden_parents` includes VI-grace nodes.
+
+    The paper does not prescribe simultaneous-message arbitration; the
+    deterministic root priority used here is based on nomination support,
+    one-hop degree, and lower speed. These are *arbitration* rules, not
+    additional selection metrics.
     """
     active = set(active_ids)
+    cnn_chains = cnn_chains or {}
+    retained_plan = dict(retained_plan or {})
+    plan = dict(retained_plan)
+    locked = set(retained_plan)
+    blocked = set(forbidden_parents)
+    D = int(depth_limit)
+    if D < 1:
+        raise ValueError('DHCV requires D >= 1')
     if not active:
-        return {}
-    cnn_chains = (cnn_chains or {})
-    first = {i: (cnn_chains[i][1] if len(cnn_chains.get(i, ())) > 1 else None)
-             for i in active}
-    # A node with no admissible CNN_1 is not a valid forwarding parent in
-    # its own local RelativeMax search. All assignments still check 'graph'.
-    # During selective VI repair, `active` contains ONLY unresolved vehicles,
-    # while rankings/chains were computed over the whole physical network.
-    # A PCH nominated outside `active` may already be a CM with descendants
-    # in the retained forest. Promoting it to a new CH here would overwrite
-    # its existing root/parent and corrupt every dependent ancestor chain.
-    # Existing clusters are handled separately by dhcv_attach_to_existing().
-    nominators = {i: pch_ranks[i][0] for i in active
-                  if (first[i] is not None and pch_ranks.get(i)
-                      and pch_ranks[i][0] in active)}
-    nominated = set(nominators.values())
-    support = {root: sum(1 for i, r in nominators.items()
-                         if r == root and i != root) for root in nominated}
-    order = sorted(nominated, key=lambda i: (
-        -support[i], -len(graph.get(i, ())),
-        float(veh_table.values(i)['speed']), str(i)))
-    plan = {}
-    for root in order:
+        return plan
+    if active & locked:
+        raise ValueError('DHCV unresolved and retained sets overlap')
+
+    # A CH is eligible only if it is a current root, not an attached CM.
+    # Preference lists are ordered by decreasing degree / lower speed.
+    all_roots = set()
+    first_support = {}
+    for i in active:
+        chain = cnn_chains.get(i, (i,))
+        rank = pch_ranks.get(i, (i,))
+        for root in rank:
+            if root in chain and (root in active or
+                                  (root in locked and plan[root][1] is None)):
+                all_roots.add(root)
+        if rank:
+            first_support[rank[0]] = first_support.get(rank[0], 0) + 1
+
+    def root_order(root):
+        state = veh_table.values(root)
+        return (-first_support.get(root, 0),
+                -len(graph.get(root, ())),
+                float(state['speed']) if state else float('inf'), str(root))
+
+    def stage_chain(i, root):
+        """Try the path that *i* selected, without altering the global plan."""
+        chain = cnn_chains.get(i, (i,))
+        if root not in chain:
+            return None
+        path = list(chain[:chain.index(root) + 1])
+        if len(path) - 1 > D:
+            return None
+        if any(a not in graph.get(b, ()) for a, b in zip(path, path[1:])):
+            return None
+        proposed = {}
         if root in plan:
-            continue
-        proposal = {root: (root, None, 0)}
-        # Reverse the directed, chosen CNN_1 links. All incoming nodes must
-        # independently nominate this root, rather than merely be D-hop
-        # reachable via an arbitrary graph path.
-        for _ in range(depth_limit):
-            added = []
-            for i in sorted(active - plan.keys() - proposal.keys()):
-                if nominators.get(i) != root:
-                    continue
-                parent = first[i]
-                if parent not in proposal or parent not in graph.get(i, ()):
-                    continue
-                depth = proposal[parent][2] + 1
-                if depth <= depth_limit:
-                    added.append((i, root, parent, depth))
-            if not added:
-                break
-            for i, r, parent, depth in added:
-                proposal[i] = (r, parent, depth)
-        # Exception 3: no member => no effective cluster in the existing
-        # framework. Avoid automatic singleton CH promotion.
-        if len(proposal) >= 2:
-            plan.update(proposal)
+            if plan[root] != (root, None, 0):
+                return None
+        elif root in active:
+            proposed[root] = (root, None, 0)
+        else:
+            return None
+        # Backward along the originating vehicle's selected CNN hops.
+        for pos in range(len(path) - 2, -1, -1):
+            node, parent = path[pos], path[pos + 1]
+            if parent in blocked:
+                return None
+            parent_state = proposed.get(parent, plan.get(parent))
+            if parent_state is None or parent_state[0] != root:
+                return None
+            depth = parent_state[2] + 1
+            if depth > D:
+                return None
+            if node in plan:
+                existing = plan[node]
+                if existing[0] != root:
+                    return None
+                # An already-connected relay need not point to this specific
+                # CNN edge; its committed route is already root-connected.
+                if existing[2] > D:
+                    return None
+            elif node in active:
+                proposed[node] = (root, parent, depth)
+            else:
+                return None
+        if root not in plan and not any(x != root for x in proposed):
+            return None  # do not create a childless head
+        if i not in plan and i not in proposed:
+            return None
+        return proposed
 
-    # Exception 1: failed PCH route may instead join CNN_1's root, provided
-    # the same selected one-hop link is physically valid and D is respected.
-    pending = active - plan.keys()
-    plan, pending = dhcv_attach_to_existing(
-        plan, graph, pending, pch_ranks, depth_limit,
-        cnn_chains=cnn_chains)
+    # During selective VI repair, try already-established CHs before electing
+    # any new CH. A retained CM can only be reused as a parent when explicitly
+    # reached through CNN1 fallback, never promoted to root.
+    retained_roots = {i for i, (_, p, _) in retained_plan.items() if p is None}
+    for pass_num in range(max((len(pch_ranks.get(i, ())) for i in active), default=0)):
+        for root in sorted(all_roots, key=lambda r: (
+                0 if r in retained_roots else 1, root_order(r))):
+            candidates = sorted((i for i in active if i not in plan and
+                                 root in pch_ranks.get(i, ()) and
+                                 pch_ranks[i].index(root) == pass_num and
+                                 root in cnn_chains.get(i, ())),
+                                key=lambda i: (cnn_chains[i].index(root), str(i)))
+            for i in candidates:
+                proposed = stage_chain(i, root)
+                if proposed:
+                    plan.update(proposed)
 
-    # A group of nodes can nominate a CH that is not yet committed but would
-    # gain members whose selected CNN chain points to it. Try again after
-    # earlier conflicts have resolved, without inventing BFS paths.
-    for root in order:
-        if root not in pending:
-            continue
-        proposal = {root: (root, None, 0)}
-        for _ in range(depth_limit):
-            added = []
-            for i in sorted(pending - proposal.keys()):
-                if nominators.get(i) != root:
-                    continue
-                parent = first[i]
-                if parent in proposal and parent in graph.get(i, ()):
-                    depth = proposal[parent][2] + 1
-                    if depth <= depth_limit:
-                        added.append((i, root, parent, depth))
-            if not added:
-                break
-            for i, r, parent, depth in added:
-                proposal[i] = (r, parent, depth)
-        if len(proposal) > 1:
-            plan.update(proposal)
-            pending.difference_update(proposal)
-            plan, pending = dhcv_attach_to_existing(
-                plan, graph, pending, pch_ranks, depth_limit,
-                cnn_chains=cnn_chains)
+    # Exception 1 (final step): the CH of CNN1 is used if PCH1 / PCH2 ...
+    # could not be connected by the selected chain within D hops.
+    # The paper does not authorize arbitrary neighbor BFS in this step.
+    for _ in range(D):
+        changed = False
+        for i in sorted(active - plan.keys()):
+            chain = cnn_chains.get(i, (i,))
+            if len(chain) < 2:
+                continue
+            j = chain[1]
+            if j in blocked or j not in plan or j not in graph.get(i, ()):
+                continue
+            root, _, parent_depth = plan[j]
+            if parent_depth + 1 <= D:
+                plan[i] = (root, j, parent_depth + 1)
+                changed = True
+        if not changed:
+            break
 
-    # Exception 3 (CNN_1 fallback): a nominated, childless CH can join its
-    # chosen CNN_1 instead of remaining a singleton. When that CNN_1 is
-    # unresolved, the endpoint becomes the new CH and recruits the initiator;
-    # no arbitrary graph-neighbor or network-wide root is introduced.
-    # This also handles asymmetric local thresholds (i chooses j, but j does
-    # not choose i) without fabricating all-node CH assignments.
-    for i in sorted(tuple(pending), key=lambda k: (
-            -len(graph.get(k, ())), float(veh_table.values(k)['speed']), str(k))):
-        if i not in pending:
+    # Exception 3: when a nominated childless CH cannot attract a member,
+    # first try to become a CM of CNN1 (or CNN1's root). If both endpoints
+    # remain unresolved, CNN1 may become a CH with the former CH as member.
+    # Neither endpoint is made a CH when no admissible CNN1 exists (SA is a
+    # framework convention, not an explicit role in the WCNC paper).
+    for i in sorted(active - plan.keys(), key=root_order):
+        if i in plan:
             continue
-        j = first.get(i)
-        if j not in pending or j not in graph.get(i, ()) or j == i:
+        chain = cnn_chains.get(i, (i,))
+        if len(chain) < 2:
             continue
-        plan[j] = (j, None, 0)
-        plan[i] = (j, j, 1)
-        pending.discard(i)
-        pending.discard(j)
-        plan, pending = dhcv_attach_to_existing(
-            plan, graph, pending, pch_ranks, depth_limit,
-            cnn_chains=cnn_chains)
+        j = chain[1]
+        if j in blocked or j not in graph.get(i, ()):
+            continue
+        if j in plan:
+            root, _, dep = plan[j]
+            if dep + 1 <= D:
+                plan[i] = (root, j, dep + 1)
+        elif j in active:
+            # Retain CH/CM distinction without promoting all isolated nodes.
+            plan[j] = (j, None, 0)
+            plan[i] = (j, j, 1)
 
-    # Exception 2: CH which is also CM elsewhere may join another CH only if
-    # its *whole* branch can move within D, and only through its CNN_1 link.
-    for head in sorted(tuple(plan)):
-        if plan[head][1] is not None:
+    # Exception 2: a vehicle elected CH locally may itself have selected a
+    # CH in another already-formed cluster. It and its entire existing branch
+    # can change to CM only if the resulting maximum depth does not exceed D.
+    # This operation is forbidden for retained VI clusters (maintenance must
+    # not change valid assignments before RI).
+    for head in sorted(active & plan.keys(), key=root_order):
+        if head in locked or plan[head][1] is not None:
             continue
-        nominees = pch_ranks.get(head, ())
-        neighbor = first.get(head)
-        if not nominees or nominees[0] == head or neighbor not in plan:
+        choices = pch_ranks.get(head, ())
+        if not choices or choices[0] == head:
             continue
-        other_root, _, other_depth = plan[neighbor]
-        if other_root == head or neighbor not in graph.get(head, ()):
+        chain = cnn_chains.get(head, (head,))
+        if len(chain) < 2:
             continue
-        subtree = {i for i, (root, _, _) in plan.items() if root == head}
-        tail_depth = max(plan[i][2] for i in subtree)
-        if other_depth + 1 + tail_depth > depth_limit:
+        immediate = chain[1]
+        if immediate not in plan or immediate in blocked or immediate not in graph.get(head, ()):
             continue
-        for i in subtree:
-            _, old_parent, old_depth = plan[i]
-            plan[i] = (other_root,
-                       neighbor if i == head else old_parent,
-                       other_depth + 1 + old_depth)
-    # Defensive contract: a local forest formation must never take ownership
-    # of a retained vehicle outside the explicitly supplied recovery set.
-    unexpected = set(plan).difference(active)
-    if unexpected:
-        raise AssertionError('DHCV local formation captured external nodes: '
-                             + repr(sorted(unexpected)))
+        new_root, _, pd = plan[immediate]
+        if new_root == head:
+            continue
+        subtree = [node for node in plan if plan[node][0] == head]
+        if pd + 1 + max(plan[node][2] for node in subtree) > D:
+            continue
+        for node in subtree:
+            _, p, old_depth = plan[node]
+            plan[node] = (new_root, immediate if node == head else p,
+                          pd + 1 + old_depth)
+
+    # Do not leave a root without any CM; follow Exception 3 first, then
+    # leave it unresolved if CNN1 cannot admit it without creating a cycle.
+    for head in sorted(active & plan.keys()):
+        if head in locked or plan[head][1] is not None:
+            continue
+        if any(root == head and p is not None for root, p, _ in plan.values()):
+            continue
+        chain = cnn_chains.get(head, (head,))
+        j = chain[1] if len(chain) > 1 else None
+        if j in plan and j not in blocked and j in graph.get(head, ()):
+            other_root, _, depth = plan[j]
+            if other_root != head and depth + 1 <= D:
+                plan[head] = (other_root, j, depth + 1)
+                continue
+        plan.pop(head)
+
+    # The WCNC paper defines only CH and CM; the original user framework also
+    # supports SAs. `paper_ch` represents otherwise-uncovered singletons as CH
+    # to satisfy the D-hop dominating-set interpretation. `sa` (default)
+    # leaves them unclustered, matching the existing MMZCA reporting convention.
+    if isolated_policy == 'paper_ch':
+        for i in sorted(active - plan.keys()):
+            plan[i] = (i, None, 0)
+    elif isolated_policy != 'sa':
+        raise ValueError('Unknown DHCV isolated-node policy: ' + str(isolated_policy))
+
+    # In particular, no retained member may be implicitly re-elected as CH.
+    for i in locked:
+        if plan.get(i) != retained_plan[i]:
+            raise AssertionError('DHCV VI recovery overwrote retained assignment ' + str(i))
+    if set(plan) - (active | locked):
+        raise AssertionError('DHCV forest assigned a noneligible vehicle')
     return plan
 
 
 def dhcv_attach_to_existing(plan, graph, available, pch_ranks, depth_limit,
                             eligible_parents=None, cnn_chains=None):
-    """Repair or initial fallback using the node's selected CNN_1 hop.
-
-    This is intentionally NOT a greedy search over all graph neighbors.
-    Otherwise almost every vehicle can be attached under a distant CH that
-    it never selected, which destroys the published DHCV decision rule.
-    """
+    """Repair to existing CHs in PCH order, then try CNN1's CH (Exception 1)."""
     pending = set(available)
+    safe = set(plan) if eligible_parents is None else set(eligible_parents)
+    paths = cnn_chains or {}
+    D = int(depth_limit)
     if not pending:
         return plan, pending
-    safe = set(plan) if eligible_parents is None else set(eligible_parents)
-    cnn_chains = cnn_chains or {}
-    for _ in range(depth_limit):
-        best = []
-        for i in pending:
-            path = cnn_chains.get(i, ())
-            if len(path) < 2:
+
+    # All PCH options are attempted in order, *not* just CNN1.
+    for _ in range(D + 1):
+        progress = False
+        for i in sorted(tuple(pending)):
+            chain = paths.get(i, (i,))
+            for root in pch_ranks.get(i, ()):
+                if root not in chain or root not in plan or plan[root] != (root, None, 0):
+                    continue
+                seq = chain[:chain.index(root) + 1]
+                if any(v not in graph.get(u, ()) for u, v in zip(seq, seq[1:])):
+                    continue
+                proposed = {}
+                feasible = True
+                for k in range(len(seq) - 2, -1, -1):
+                    node, parent = seq[k], seq[k + 1]
+                    if parent not in safe and parent not in proposed:
+                        feasible = False
+                        break
+                    ps = proposed.get(parent, plan.get(parent))
+                    if ps is None or ps[0] != root or ps[2] + 1 > D:
+                        feasible = False
+                        break
+                    if node in plan:
+                        if plan[node][0] != root:
+                            feasible = False
+                            break
+                    elif node in pending:
+                        proposed[node] = (root, parent, ps[2] + 1)
+                    else:
+                        feasible = False
+                        break
+                if feasible and i in proposed:
+                    plan.update(proposed)
+                    pending.difference_update(proposed)
+                    safe.update(proposed)
+                    progress = True
+                    break
+            if i not in pending:
                 continue
-            j = path[1]
-            if j not in safe or j not in graph.get(i, ()):
-                continue
-            root, _, depth = plan[j]
-            if depth + 1 > depth_limit:
-                continue
-            preferred = pch_ranks.get(i, ())
-            key = (preferred.index(root) if root in preferred else len(preferred),
-                   depth + 1, str(root), str(i))
-            best.append((key, i, j, root, depth + 1))
-        if not best:
+            # Last fallback, CNN1's CH.
+            if len(chain) > 1:
+                j = chain[1]
+                if j in safe and j in plan and j in graph.get(i, ()):
+                    root, _, dep = plan[j]
+                    if dep + 1 <= D:
+                        plan[i] = (root, j, dep + 1)
+                        pending.discard(i)
+                        safe.add(i)
+                        progress = True
+        if not progress:
             break
-        # Single synchronous round of local assertions; newly connected
-        # parents only become eligible on the next iteration of this loop.
-        attachments = sorted(best)
-        for _, i, j, root, depth in attachments:
-            if i not in pending or j not in safe:
-                continue
-            plan[i] = (root, j, depth)
-            pending.discard(i)
-            safe.add(i)
     return plan, pending
 
 
