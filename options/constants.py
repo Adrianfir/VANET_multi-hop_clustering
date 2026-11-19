@@ -31,7 +31,7 @@ class Inputs:
         # ==================================================================
         # Select the traffic-density dataset; this is a file-selection option,
         # not an optimization weight or vehicle communication parameter.
-        data_density = 'midsize'
+        data_density = 'largesize'
         traffic_folder = (
             pathlib.Path(__file__).parent.parent.parent.absolute()
             / 'traffic_data'
@@ -80,7 +80,7 @@ class Inputs:
 
         # Maximum number of parent links from a root CH to any CM:
         # d_i = d_parent + 1 <= H_max.  A CM at H_max cannot admit children.
-        h_max = 4
+        h_max = 3
 
         # Maximum number of direct children accepted by a root CH / CM relay.
         # Admission also requires a valid root path, depth, and physical link.
