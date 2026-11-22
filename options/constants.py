@@ -55,8 +55,8 @@ class Inputs:
 
         # SUMO timestep index at which the observation begins.  'iter' is the
         # number of successive one-second updates after initialization.
-        start_time = 1600
-        iter = 200
+        start_time = 400
+        iter = 2600
 
         # Hash-table sizing parameter used by DataTable initialization; it is
         # a storage setting, NOT the number of active vehicles in the trace.
@@ -75,12 +75,12 @@ class Inputs:
 
         # Transmission ranges in metres.  A physical parent-child link (i,j)
         # is feasible only if its distance <= min(TR_i, TR_j), per Eq. (comm).
-        veh_trans_range = 300
-        bus_trans_range = 300
+        veh_trans_range = 100
+        bus_trans_range = 100
 
         # Maximum number of parent links from a root CH to any CM:
         # d_i = d_parent + 1 <= H_max.  A CM at H_max cannot admit children.
-        h_max = 3
+        h_max = 5
 
         # Maximum number of direct children accepted by a root CH / CM relay.
         # Admission also requires a valid root path, depth, and physical link.

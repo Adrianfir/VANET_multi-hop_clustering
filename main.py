@@ -93,21 +93,22 @@ if __name__ == "__main__":
     print('\n')
     print(f'n_vehs: {len(cluster.veh_table.ids())}')
     print(f'n_buses: {len(cluster.bus_table.ids())}')
-    print(f'n_chs: {n_chs}')
-    print(f'n_savs: {n_savs}')
-    print(f'avg_chs: {sum(n_chs)/len(n_chs)}')
-    print(f'avg_stand_alones: {sum(n_savs)/len(n_savs)}')
+    # print(f'n_chs: {n_chs}')
+    # print(f'n_savs: {n_savs}')
+    print(f'avg_chs: {sum(n_chs[3:])/len(n_chs)}')
+    print(f'avg_stand_alones: {sum(n_savs[3:])/len(n_savs)}')
     print(f'mmzca_same_root_parent_switches: {getattr(cluster, "mmzca_parent_switches", 0)}')
+    # cluster.print_table()
 
-    print(f'tvct_t: {cluster.tvct_history}, avg_tvct: {cluster.avg_tvct_history}')
+    # print(f'tvct_t: {cluster.tvct_history}, avg_tvct: {cluster.avg_tvct_history}')
     # print(f'execution time: {end_time - start_time}')
     # print(f'all the edges: \n{cluster.net_graph.edges()}')
-    ch_high_mems = 0
-    for i in cluster.all_chs:
-        temp_table = cluster.bus_table if 'bus' in i else cluster.veh_table
-        if len(temp_table.values(i)['cluster_members'])>10:
-            ch_high_mems += 1
-    print(f'ch_high_mems: {ch_high_mems}')
+    # ch_high_mems = 0
+    # for i in cluster.all_chs:
+    #     temp_table = cluster.bus_table if 'bus' in i else cluster.veh_table
+    #     if len(temp_table.values(i)['cluster_members'])>10:
+    #         ch_high_mems += 1
+    # print(f'ch_high_mems: {ch_high_mems}')
     plt.plot(range(len(cluster.tvct_history)), cluster.tvct_history, label='TVCT(t)')
     plt.plot(range(len(cluster.avg_tvct_history)), cluster.avg_tvct_history,
              label='Running mean TVCT')

@@ -52,7 +52,7 @@ import options.constants as constants_module
 # ---------------------------------------------------------------------------
 # Requested experiment grid
 # ---------------------------------------------------------------------------
-H_MAX_VALUES = np.arange(0, 10, 1)
+H_MAX_VALUES = np.arange(10, 21, 1)
 WINDOW_STARTS = np.arange(400, 3000, 100)
 WINDOW_SECONDS = 200
 TRANSMISSION_RANGES = (100, 200, 300)
