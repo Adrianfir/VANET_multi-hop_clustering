@@ -40,7 +40,7 @@ class Inputs:
 
         # The no-bus/RSU trace contains ordinary vehicles only.  Bus support
         # remains configured because MMZCA also supports DRU/bus-rooted runs.
-        sumo_trace = xml.dom.minidom.parse(str(traffic_folder / 'sumoTrace_no_bus_and_rsu.xml'))
+        sumo_trace = xml.dom.minidom.parse(str(traffic_folder / 'sumoTrace.xml'))
         sumo_edge = xml.dom.minidom.parse(str(traffic_folder / 'osm.net.xml'))
         sumo_node = xml.dom.minidom.parse(str(traffic_folder / 'osm_bbox.osm.xml'))
 
@@ -122,7 +122,7 @@ class Inputs:
 
         # Delta_B: admissible score premium for selecting a bus-rooted parent.
         # It applies only after normal link, capacity, and depth validation.
-        delta_bus = 0.15
+        delta_bus = 0.05
 
         # ==================================================================
         # 4. Root-preserving parent switching and cluster formation
