@@ -31,7 +31,7 @@ class Inputs:
         # ==================================================================
         # Select the traffic-density dataset; this is a file-selection option,
         # not an optimization weight or vehicle communication parameter.
-        data_density = 'largesize'
+        data_density = 'midsize'
         traffic_folder = (
             pathlib.Path(__file__).parent.parent.parent.absolute()
             / 'traffic_data'
@@ -55,8 +55,8 @@ class Inputs:
 
         # SUMO timestep index at which the observation begins.  'iter' is the
         # number of successive one-second updates after initialization.
-        start_time = 400
-        iter = 2600
+        start_time = 900
+        iter = 200
 
         # Hash-table sizing parameter used by DataTable initialization; it is
         # a storage setting, NOT the number of active vehicles in the trace.
@@ -75,8 +75,8 @@ class Inputs:
 
         # Transmission ranges in metres.  A physical parent-child link (i,j)
         # is feasible only if its distance <= min(TR_i, TR_j), per Eq. (comm).
-        veh_trans_range = 100
-        bus_trans_range = 100
+        veh_trans_range = 300
+        bus_trans_range = 300
 
         # Maximum number of parent links from a root CH to any CM:
         # d_i = d_parent + 1 <= H_max.  A CM at H_max cannot admit children.
@@ -100,14 +100,14 @@ class Inputs:
         # The current selector NORMALIZES these raw weights to sum to one.
         # Thus [0.4, 0.2, 0.2] is effectively [0.5, 0.25, 0.25]; retain the
         # supplied values to preserve the existing experiment's behaviour.
-        weights_m = np.array([0.4, 0.2, 0.2])
+        weights_m = np.array([0.5, 0.2, 0.3])
 
         # Positive speed-normalization floor v_0 in metres per second:
         # |speed_i - speed_j| / max(speed_i, speed_j, v_0).
         v0 = 1.0
 
         # Physical-link fraction in L_aff(i,j) = iota*L_ij +
-        # (1-iota)*A_tilde_{i|root(j)}^micro.  Lower scores are better.
+        # (1-iota)*A_tilde_{i|root(j)}^micro.  Lower scores are better.s
         iota = 0.5
 
         # Parent-selection weights w_G on:
@@ -122,7 +122,7 @@ class Inputs:
 
         # Delta_B: admissible score premium for selecting a bus-rooted parent.
         # It applies only after normal link, capacity, and depth validation.
-        delta_bus = 0.05
+        delta_bus = 0.15
 
         # ==================================================================
         # 4. Root-preserving parent switching and cluster formation

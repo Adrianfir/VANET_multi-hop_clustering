@@ -95,8 +95,8 @@ if __name__ == "__main__":
     print(f'n_buses: {len(cluster.bus_table.ids())}')
     # print(f'n_chs: {n_chs}')
     # print(f'n_savs: {n_savs}')
-    print(f'avg_chs: {sum(n_chs[3:])/len(n_chs)}')
-    print(f'avg_stand_alones: {sum(n_savs[3:])/len(n_savs)}')
+    print(f'avg_chs: {sum(n_chs[4:])/len(n_chs[4:])}')
+    print(f'avg_stand_alones: {sum(n_savs[4:])/len(n_savs[4:])}')
     print(f'mmzca_same_root_parent_switches: {getattr(cluster, "mmzca_parent_switches", 0)}')
     # cluster.print_table()
 
