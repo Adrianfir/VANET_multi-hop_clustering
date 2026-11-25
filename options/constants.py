@@ -162,7 +162,7 @@ class Inputs:
 
         # d_i = d_parent + 1 <= H_max.  A CM at H_max cannot admit children.
 
-        h_max = 2
+        h_max = 4
 
 
 
